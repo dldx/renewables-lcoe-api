@@ -18,6 +18,8 @@ ADD . /app
 # Sync the project into a new environment, using the frozen lockfile
 WORKDIR /app
 
+ENV UV_CACHE_DIR=/opt/uv-cache/
+
 RUN uv sync --frozen
 
 # Start the FastAPI app on port 7860, the default port expected by Spaces
