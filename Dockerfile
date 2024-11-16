@@ -12,11 +12,11 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 # Ensure the installed binary is on the `PATH`
 ENV PATH="/root/.local/bin/:$PATH"
 
-# Copy the current directory contents into the container at .
-COPY . .
+# Copy the project into the image
+ADD . /app
 
-# Set the working directory to /
-WORKDIR /
+# Sync the project into a new environment, using the frozen lockfile
+WORKDIR /app
 
 RUN uv sync --frozen
 
