@@ -1,41 +1,15 @@
-# Use a Python image with uv pre-installed
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# read the doc: https://huggingface.co/docs/hub/spaces-sdks-docker
+# you will also find guides on how best to write your Dockerfile
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash app_user
+FROM python:3.12
 
-# Install the project into `/app`
+# The two following lines are requirements for the Dev Mode to be functional
+# Learn more about the Dev Mode at https://huggingface.co/dev-mode-explorers
+RUN useradd -m -u 1000 user
 WORKDIR /app
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
+COPY --chown=user ./requirements.txt requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# Copy from the cache instead of linking since it's a mounted volume
-ENV UV_LINK_MODE=copy
-
-# Install the project's dependencies using the lockfile and settings
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
-
-# Then, add the rest of the project source code and install it
-ADD . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# Set proper permissions
-RUN chown -R app_user:app_user /app && \
-    chmod -R 755 /app
-
-# Switch to non-root user
-USER app_user
-
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Reset the entrypoint
-ENTRYPOINT []
-
-# Start the FastAPI app
+COPY --chown=user . /app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
