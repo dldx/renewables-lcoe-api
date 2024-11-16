@@ -53,7 +53,6 @@ def process_inputs(
         cashflow_model, post_tax_equity_irr, breakeven_tariff = calculate_cashflow_for_renewable_project(assumptions, lcoe, return_model=True)
         return { "lcoe": lcoe,
                 "post_tax_equity_irr": post_tax_equity_irr,
-                "breakeven_tariff": breakeven_tariff,
                  "cashflow_model": cashflow_model}
 
 
