@@ -1,6 +1,9 @@
 # Use a Python image with uv pre-installed
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
+# Create a non-root user
+RUN useradd -m -s /bin/bash app_user
+
 # Install the project into `/app`
 WORKDIR /app
 
@@ -17,16 +20,22 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
 ADD . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# Set proper permissions
+RUN chown -R app_user:app_user /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER app_user
+
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Reset the entrypoint, don't invoke `uv`
+# Reset the entrypoint
 ENTRYPOINT []
 
-# Start the FastAPI app on port 7860, the default port expected by Spaces
+# Start the FastAPI app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
