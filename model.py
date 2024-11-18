@@ -3,21 +3,24 @@ import numpy as np
 import polars as pl
 from pyxirr import irr, npv
 from functools import partial
+import pyxirr
 from scipy.optimize import fsolve
 
 from schema import SolarPVAssumptions
 
 
 def calculate_cashflow_for_renewable_project(
-    assumptions, tariff, return_model=False
+    assumptions: SolarPVAssumptions, tariff: float, return_model=False
 ) -> (
     Annotated[float, "Post-tax equity IRR - Cost of equity"]
     | Tuple[
         Annotated[pl.DataFrame, "Cashflow model"],
-        Annotated[float, "Post-tax equity IRR"],
+        Annotated[float | None, "Post-tax equity IRR"],
         Annotated[float, "Breakeven tariff"],
+        Annotated[SolarPVAssumptions, "Assumptions"],
     ]
 ):
+    assumptions = assumptions.model_copy(deep=True)
     # Create a dataframe, starting with the period
     model = pl.DataFrame(
         {
@@ -65,6 +68,16 @@ def calculate_cashflow_for_renewable_project(
             Target_Debt_Service_mn=pl.when(pl.col("Period") == 0)
             .then(0)
             .otherwise(pl.col("CFADS_mn") / assumptions.dcsr),
+        ))
+    # Calculate DCSR-sculpted debt % of capital cost if debt % is not provided
+    if assumptions.debt_pct_of_capital_cost is None:
+        assumptions.debt_pct_of_capital_cost = pyxirr.npv(assumptions.cost_of_debt, model.select("Target_Debt_Service_mn").__array__()[0:, 0])/(assumptions.capital_cost/1000)
+        # assumptions.equity_pct_of_capital_cost = 1 - assumptions.debt_pct_of_capital_cost
+        assert assumptions.debt_pct_of_capital_cost + assumptions.equity_pct_of_capital_cost == 1
+        assert assumptions.debt_pct_of_capital_cost >= 0 and assumptions.debt_pct_of_capital_cost <= 1
+        assert assumptions.equity_pct_of_capital_cost >= 0 and assumptions.equity_pct_of_capital_cost <= 1
+
+    model = (model.with_columns(
             Debt_Outstanding_EoP_mn=pl.when(pl.col("Period") == 0)
             .then(
                 assumptions.debt_pct_of_capital_cost * assumptions.capital_cost / 1000
@@ -97,9 +110,8 @@ def calculate_cashflow_for_renewable_project(
         )
         .with_columns(
             Debt_Outstanding_BoP_mn=pl.col("Debt_Outstanding_EoP_mn").shift(1),
-        )
-        .to_pandas()
-    )
+        ))
+    model = model.to_pandas()
 
     for period in model["Period"]:
         if period > 1:
@@ -154,18 +166,32 @@ def calculate_cashflow_for_renewable_project(
     )
 
     # Calculate Post-Tax Equity IRR
-    post_tax_equity_irr = irr(model["Post_Tax_Net_Equity_Cashflow_mn"].to_numpy())
+    try:
+        post_tax_equity_irr = irr(model["Post_Tax_Net_Equity_Cashflow_mn"].to_numpy())
+    except pyxirr.InvalidPaymentsError as e:
+        raise ValueError(
+            f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}.")
+
     if return_model:
-        return model, post_tax_equity_irr, tariff
-    return post_tax_equity_irr - assumptions.cost_of_equity
+        return model, post_tax_equity_irr, tariff, assumptions
+    return post_tax_equity_irr - assumptions.cost_of_equity # type: ignore
 
 
-def calculate_lcoe(assumptions: SolarPVAssumptions) -> Annotated[float, "LCOE"]:
+def calculate_lcoe(assumptions: SolarPVAssumptions, LCOE_guess: float = 20, iter_count: int = 0) -> Annotated[float, "LCOE"]:
     """The LCOE is the breakeven tariff that makes the project NPV zero"""
     # Define the objective function
     objective_function = partial(calculate_cashflow_for_renewable_project, assumptions)
+    if iter_count > 10:
+        raise ValueError("LCOE could not be calculated")
 
-    # Solve for the LCOE
-    LCOE_guess = 30
-    lcoe = fsolve(objective_function, LCOE_guess)[0] + 0.0001
+    try:
+        lcoe = fsolve(objective_function, LCOE_guess)[0] + 0.0001
+    except ValueError as e:
+        # Set LCOE lower so that fsolve can find a solution
+        LCOE_guess = 10
+        lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
+    except AssertionError as e:
+        # LCOE is too low
+        LCOE_guess += 10
+        lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
     return lcoe

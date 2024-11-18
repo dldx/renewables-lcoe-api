@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Optional
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 
@@ -14,7 +14,7 @@ class SolarPVAssumptions(BaseModel):
         ),
     ] = 0.10
     capital_expenditure_per_mw: Annotated[
-        float, Field(ge=1e5, le=1e6, title="Capital expenditure per MW ($/MW)")
+        float, Field(ge=1e5, le=1e7, title="Capital expenditure per MW ($/MW)")
     ] = 670_000
     o_m_cost_pct_of_capital_cost: Annotated[
         float,
@@ -26,28 +26,19 @@ class SolarPVAssumptions(BaseModel):
         ),
     ] = 0.02
     debt_pct_of_capital_cost: Annotated[
-        float,
+        Optional[float],
         Field(
             ge=0,
             le=1,
             title="Debt Percentage (%)",
             description="Debt as a percentage of capital expenditure",
         ),
-    ] = 0.8
-    equity_pct_of_capital_cost: Annotated[
-        float,
-        Field(
-            ge=0,
-            le=1,
-            title="Equity Percentage (%)",
-            description="Equity as a percentage of capital expenditure",
-        ),
-    ] = 0.2
+    ] = None
     cost_of_debt: Annotated[
         float,
         Field(
             ge=0,
-            le=0.2,
+            le=0.5,
             title="Cost of Debt (%)",
             description="Cost of debt (as a decimal, e.g., 0.05 for 5%)",
         ),
@@ -56,7 +47,7 @@ class SolarPVAssumptions(BaseModel):
         float,
         Field(
             ge=0,
-            le=0.3,
+            le=0.5,
             title="Cost of Equity (%)",
             description="Cost of equity (as a decimal, e.g., 0.1 for 10%)",
         ),
@@ -87,12 +78,13 @@ class SolarPVAssumptions(BaseModel):
             title="Debt Service Coverage Ratio",
             description="Debt service coverage ratio",
         ),
-    ] = 1.3
+    ]
 
     @model_validator(mode="after")
     def check_sum_of_parts(self):
-        if self.debt_pct_of_capital_cost + self.equity_pct_of_capital_cost != 1:
-            raise ValueError("Debt and equity percentages must sum to 1")
+        if self.debt_pct_of_capital_cost is not None and self.equity_pct_of_capital_cost is not None:
+            if self.debt_pct_of_capital_cost + self.equity_pct_of_capital_cost != 1:
+                raise ValueError("Debt and equity percentages must sum to 1")
         return self
 
     @computed_field
@@ -103,13 +95,35 @@ class SolarPVAssumptions(BaseModel):
 
     @computed_field
     @property
-    def tax_adjusted_WACC(self) -> Annotated[float,
+    def tax_adjusted_WACC(self) -> Annotated[Optional[float],
                                              Field(title="Tax Adjusted WACC (%)",
                                                    description="Tax adjusted weighted average cost of capital")]:
-        return (self.debt_pct_of_capital_cost * self.cost_of_debt * (1 - self.tax_rate) +
-                self.equity_pct_of_capital_cost * self.cost_of_equity)
+        if (self.debt_pct_of_capital_cost is not None) and (self.equity_pct_of_capital_cost is not None):
+            return (self.debt_pct_of_capital_cost * self.cost_of_debt * (1 - self.tax_rate) +
+                    self.equity_pct_of_capital_cost * self.cost_of_equity)
 
     @computed_field
     @property
-    def wacc(self) -> Annotated[float, Field(title="WACC (%)", description="Weighted average cost of capital")]:
-        return self.debt_pct_of_capital_cost * self.cost_of_debt + self.equity_pct_of_capital_cost * self.cost_of_equity
+    def wacc(self) -> Annotated[Optional[float], Field(title="WACC (%)", description="Weighted average cost of capital")]:
+        if self.debt_pct_of_capital_cost is not None:
+            return self.debt_pct_of_capital_cost * self.cost_of_debt + self.equity_pct_of_capital_cost * self.cost_of_equity
+
+    @computed_field
+    @property
+    def equity_pct_of_capital_cost(self) -> Annotated[Optional[float],
+                                                     Field(title="Equity Percentage (%)",
+                                                           description="Equity as a percentage of capital expenditure")]:
+        if self.debt_pct_of_capital_cost is not None:
+            return 1 - self.debt_pct_of_capital_cost
+
+    # @model_validator(mode='after')
+    # def check_dcsr_or_debt_pct(self):
+    #     """
+    #     Check that either dcsr or debt_pct_of_capital_cost is provided, and not both.
+    #     """
+    #     if (self.dcsr and self.debt_pct_of_capital_cost) or (not self.dcsr and not self.debt_pct_of_capital_cost):
+    #         raise ValueError("""Either dcsr or debt_pct_of_capital_cost must be provided, not both.
+    #                          If target dcsr is provided, debt_pct_of_capital_cost will be calculated as
+    #                             `debt_pct_of_capital_cost = npv(cost_of_debt, debt_service) / capital_cost`
+    #                          """)
+    #     return self
