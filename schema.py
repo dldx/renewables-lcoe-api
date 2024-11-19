@@ -13,9 +13,9 @@ class SolarPVAssumptions(BaseModel):
             description="Capacity factor as a decimal, e.g., 0.2 for 20%",
         ),
     ] = 0.10
-    capital_expenditure_per_mw: Annotated[
-        float, Field(ge=1e5, le=1e7, title="Capital expenditure per MW ($/MW)")
-    ] = 670_000
+    capital_expenditure_per_kw: Annotated[
+        float, Field(ge=1e2, le=1e4, title="Capital expenditure ($/kW)")
+    ] = 670
     o_m_cost_pct_of_capital_cost: Annotated[
         float,
         Field(
@@ -78,7 +78,7 @@ class SolarPVAssumptions(BaseModel):
             title="Debt Service Coverage Ratio",
             description="Debt service coverage ratio",
         ),
-    ]
+    ] = 1.3
 
     @model_validator(mode="after")
     def check_sum_of_parts(self):
@@ -91,7 +91,7 @@ class SolarPVAssumptions(BaseModel):
     @property
     def capital_cost(self) -> Annotated[float,
                                         Field(title="Capital Cost ($)", description="Total capital cost")]:
-        return self.capacity_mw * self.capital_expenditure_per_mw
+        return self.capacity_mw * self.capital_expenditure_per_kw * 1000
 
     @computed_field
     @property
@@ -105,7 +105,7 @@ class SolarPVAssumptions(BaseModel):
     @computed_field
     @property
     def wacc(self) -> Annotated[Optional[float], Field(title="WACC (%)", description="Weighted average cost of capital")]:
-        if self.debt_pct_of_capital_cost is not None:
+        if self.debt_pct_of_capital_cost is not None and self.equity_pct_of_capital_cost is not None:
             return self.debt_pct_of_capital_cost * self.cost_of_debt + self.equity_pct_of_capital_cost * self.cost_of_equity
 
     @computed_field
@@ -115,6 +115,13 @@ class SolarPVAssumptions(BaseModel):
                                                            description="Equity as a percentage of capital expenditure")]:
         if self.debt_pct_of_capital_cost is not None:
             return 1 - self.debt_pct_of_capital_cost
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, values):
+        if isinstance(values, dict):
+            return {k: (None if v == '' or v == "None" else v) for k, v in values.items()}
+        return values
 
     # @model_validator(mode='after')
     # def check_dcsr_or_debt_pct(self):

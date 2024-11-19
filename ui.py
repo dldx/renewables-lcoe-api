@@ -26,7 +26,7 @@ def process_inputs(
         assumptions = SolarPVAssumptions(
             capacity_mw=capacity_mw,
             capacity_factor=capacity_factor,
-            capital_expenditure_per_mw=capital_expenditure_per_kw*1000,
+            capital_expenditure_per_kw=capital_expenditure_per_kw,
             o_m_cost_pct_of_capital_cost=o_m_cost_pct_of_capital_cost,
             debt_pct_of_capital_cost=debt_pct_of_capital_cost if financing_mode == "Manual Debt/Equity Split" else None,
             cost_of_debt=cost_of_debt,
@@ -65,28 +65,66 @@ def process_inputs(
 def update_equity_from_debt(debt_pct):
     return 1 - debt_pct
 
+def get_params(request: gr.Request) -> Dict:
+    params = SolarPVAssumptions.model_validate(dict(request.query_params))
+    return {capacity_mw: params.capacity_mw,
+            capacity_factor: params.capacity_factor,
+            capital_expenditure_per_kw: params.capital_expenditure_per_kw,
+            o_m_cost_pct_of_capital_cost: params.o_m_cost_pct_of_capital_cost,
+            cost_of_debt: params.cost_of_debt,
+            cost_of_equity: params.cost_of_equity,
+            tax_rate: params.tax_rate,
+            project_lifetime_years: params.project_lifetime_years,
+            dcsr: params.dcsr,
+            }
+
+def get_share_url(
+    capacity_mw,
+    capacity_factor,
+    capital_expenditure_per_kw,
+    o_m_cost_pct_of_capital_cost,
+    cost_of_debt,
+    cost_of_equity,
+    tax_rate,
+    project_lifetime_years,
+    dcsr,
+    financing_mode,
+    request: gr.Request
+):
+    params = {
+        "capacity_mw": capacity_mw,
+        "capacity_factor": capacity_factor,
+        "capital_expenditure_per_kw": capital_expenditure_per_kw,
+        "o_m_cost_pct_of_capital_cost": o_m_cost_pct_of_capital_cost,
+        "cost_of_debt": cost_of_debt,
+        "cost_of_equity": cost_of_equity,
+        "tax_rate": tax_rate,
+        "project_lifetime_years": project_lifetime_years,
+        "dcsr": dcsr,
+    }
+    base_url = "/ui?"  # Replace with actual base URL
+    return gr.Button(link=base_url + urlencode(params))
+
 with gr.Blocks() as interface:
     with gr.Row():
         gr.Markdown("# Solar PV Project Cashflow Model")
+        share_url = gr.Button(icon="share.svg", value="", size="sm", variant="secondary")
     with gr.Row():
         with gr.Column():
             with gr.Row():
                 capacity_mw = gr.Slider(
-                    value=30,
                     minimum=1,
                     maximum=1000,
                     step=10,
                     label="Capacity (MW)",
                 )
                 capacity_factor = gr.Slider(
-                    value=0.10,
                     label="Capacity factor (%)",
                     minimum=0,
                     maximum=0.6,
                     step=0.01,
                 )
                 project_lifetime_years = gr.Slider(
-                    value=25,
                     label="Project Lifetime (years)",
                     minimum=5,
                     maximum=50,
@@ -94,14 +132,12 @@ with gr.Blocks() as interface:
                 )
             with gr.Row():
                 capital_expenditure_per_kw = gr.Slider(
-                    value=670,
                     label="Capital expenditure ($/kW)",
                     minimum=1e2,
                     maximum=1e3,
                     step=10,
                 )
                 o_m_cost_pct_of_capital_cost = gr.Slider(
-                    value=0.02,
                     label="O&M as % of total cost (%)",
                     minimum=0,
                     maximum=0.5,
@@ -109,22 +145,20 @@ with gr.Blocks() as interface:
                 )
             with gr.Row():
                 cost_of_debt = gr.Slider(
-                    value=0.05, label="Cost of Debt (%)", minimum=0, maximum=0.5, step=0.01
+                    label="Cost of Debt (%)", minimum=0, maximum=0.5, step=0.01
                 )
                 cost_of_equity = gr.Slider(
-                    value=0.10,
                     label="Cost of Equity (%)",
                     minimum=0,
                     maximum=0.5,
                     step=0.01,
                 )
                 tax_rate = gr.Slider(
-                    value=0.30, label="Tax Rate (%)", minimum=0, maximum=0.5, step=0.01
+                    label="Tax Rate (%)", minimum=0, maximum=0.5, step=0.01
                 )
             with gr.Row():
                 with gr.Row():
                     debt_pct_of_capital_cost = gr.Slider(
-                        value=0.8,
                         label="Debt Percentage (%)",
                         minimum=0,
                         maximum=1,
@@ -133,14 +167,12 @@ with gr.Blocks() as interface:
                         interactive=False,
                     )
                     equity_pct_of_capital_cost = gr.Number(
-                        value=0.2,
                         label="Equity Percentage (%)",
                         visible=True,
                         interactive=False,
                         precision=2
                     )
                     dcsr = gr.Slider(
-                        value=1.3,
                         label="Debt Service Coverage Ratio",
                         minimum=1,
                         maximum=2,
@@ -157,6 +189,7 @@ with gr.Blocks() as interface:
             line_chart = gr.Plot()
     with gr.Row():
         model_output = gr.Matrix(headers=None, max_height=800)
+
 
     # Set up event handlers for all inputs
     input_components = [
@@ -177,14 +210,39 @@ with gr.Blocks() as interface:
             fn=process_inputs,
             inputs=input_components + [financing_mode],
             outputs=[json_output, line_chart,  debt_pct_of_capital_cost, equity_pct_of_capital_cost, model_output],
+            trigger_mode="always_last"
         )
 
-    # Run the model on first load
-    interface.load(
-        process_inputs,
-        inputs=input_components + [financing_mode],
-        outputs=[json_output, line_chart,  debt_pct_of_capital_cost, equity_pct_of_capital_cost, model_output],
+    json_output.change(
+        fn=get_share_url,
+        inputs=[
+            capacity_mw,
+            capacity_factor,
+            capital_expenditure_per_kw,
+            o_m_cost_pct_of_capital_cost,
+            cost_of_debt,
+            cost_of_equity,
+            tax_rate,
+            project_lifetime_years,
+            dcsr,
+            financing_mode
+        ],
+        outputs=share_url,
+        trigger_mode="always_last"
     )
+
+    interface.load(
+        get_params,
+        None,
+        input_components,
+        trigger_mode="always_last"
+    )
+    # # Run the model on first load
+    # interface.load(
+    #     process_inputs,
+    #     inputs=input_components + [financing_mode],
+    #     outputs=[json_output, line_chart,  debt_pct_of_capital_cost, equity_pct_of_capital_cost, model_output],
+    # )
 
     def toggle_financing_inputs(choice):
         if choice == "Target DSCR":
