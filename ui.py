@@ -105,10 +105,12 @@ def get_share_url(
     base_url = "/ui?"  # Replace with actual base URL
     return gr.Button(link=base_url + urlencode(params))
 
-with gr.Blocks() as interface:
+with gr.Blocks(theme="citrus") as interface:
     with gr.Row():
-        gr.Markdown("# Solar PV Project Cashflow Model")
-        share_url = gr.Button(icon="share.svg", value="", size="sm", variant="secondary")
+        with gr.Column(scale=8):
+            gr.Markdown("# Solar PV Project Cashflow Model")
+        with gr.Column(scale=1):
+            share_url = gr.Button(icon="share.svg", value="Share with assumptions", size="sm", variant="secondary")
     with gr.Row():
         with gr.Column():
             with gr.Row():

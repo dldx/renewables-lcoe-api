@@ -29,9 +29,10 @@ async def read_main(request: Request):
     query_params = dict(request.query_params)
 
     # Create new URL with parameters
-    redirect_url = "/ui"
+    redirect_url = request.url.scheme + "://" + request.url.netloc + request.url.path + "ui"
     if query_params:
         redirect_url += "?" + urlencode(query_params)
+    print(redirect_url)
 
     return RedirectResponse(redirect_url)
 
