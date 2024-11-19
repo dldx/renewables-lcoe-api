@@ -102,7 +102,7 @@ def get_share_url(
         "project_lifetime_years": project_lifetime_years,
         "dcsr": dcsr,
     }
-    base_url = "/ui?"  # Replace with actual base URL
+    base_url = "?"
     return gr.Button(link=base_url + urlencode(params))
 
 with gr.Blocks(theme="citrus") as interface:
