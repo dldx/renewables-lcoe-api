@@ -32,7 +32,9 @@ async def read_main(request: Request):
     print(request.url.components)
     print(request.url.scheme)
     print(request.url.netloc)
+    print("hf.space" in request.url.netloc)
     redirect_url = (request.url.scheme if "hf.space" not in request.url.netloc else "https") + "://" + request.url.netloc + request.url.path + "ui"
+    print(redirect_url)
     if query_params:
         redirect_url += "?" + urlencode(query_params)
 
