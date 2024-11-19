@@ -29,6 +29,9 @@ async def read_main(request: Request):
     query_params = dict(request.query_params)
 
     # Create new URL with parameters
+    print(request.url.components)
+    print(request.url.scheme)
+    print(request.url.netloc)
     redirect_url = (request.url.scheme if "hf.space" not in request.url.netloc else "https") + "://" + request.url.netloc + request.url.path + "ui"
     if query_params:
         redirect_url += "?" + urlencode(query_params)
