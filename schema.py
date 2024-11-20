@@ -70,6 +70,15 @@ class SolarPVAssumptions(BaseModel):
             description="Project lifetime in years",
         ),
     ] = 25
+    degradation_rate: Annotated[
+        float,
+        Field(
+            ge=0,
+            le=0.05,
+            title="Degradation Rate (%)",
+            description="Annual degradation rate as a decimal, e.g., 0.01 for 1%",
+        ),
+    ] = 0.005
     dcsr: Annotated[
         float,
         Field(
@@ -79,10 +88,18 @@ class SolarPVAssumptions(BaseModel):
             description="Debt service coverage ratio",
         ),
     ] = 1.3
+    targetting_dcsr: Annotated[
+        bool,
+        Field(
+            title="Target DSCR?",
+            description="Whether to target the DSCR or the debt percentage. If True, the DCSR will be used to calculate the debt percentage.",
+        )
+    ] = True
 
     @model_validator(mode="after")
     def check_sum_of_parts(self):
-        if self.debt_pct_of_capital_cost is not None and self.equity_pct_of_capital_cost is not None:
+        if not self.targetting_dcsr:
+            assert self.debt_pct_of_capital_cost is not None, "Debt percentage must be provided"
             if self.debt_pct_of_capital_cost + self.equity_pct_of_capital_cost != 1:
                 raise ValueError("Debt and equity percentages must sum to 1")
         return self
@@ -123,14 +140,3 @@ class SolarPVAssumptions(BaseModel):
             return {k: (None if v == '' or v == "None" else v) for k, v in values.items()}
         return values
 
-    # @model_validator(mode='after')
-    # def check_dcsr_or_debt_pct(self):
-    #     """
-    #     Check that either dcsr or debt_pct_of_capital_cost is provided, and not both.
-    #     """
-    #     if (self.dcsr and self.debt_pct_of_capital_cost) or (not self.dcsr and not self.debt_pct_of_capital_cost):
-    #         raise ValueError("""Either dcsr or debt_pct_of_capital_cost must be provided, not both.
-    #                          If target dcsr is provided, debt_pct_of_capital_cost will be calculated as
-    #                             `debt_pct_of_capital_cost = npv(cost_of_debt, debt_service) / capital_cost`
-    #                          """)
-    #     return self

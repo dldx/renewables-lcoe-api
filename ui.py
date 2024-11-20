@@ -19,6 +19,7 @@ def process_inputs(
     cost_of_equity,
     tax_rate,
     project_lifetime_years,
+    degradation_rate,
     dcsr,
     financing_mode,
     request: gr.Request,
@@ -39,7 +40,9 @@ def process_inputs(
             cost_of_equity=cost_of_equity,
             tax_rate=tax_rate,
             project_lifetime_years=project_lifetime_years,
+            degradation_rate=degradation_rate,
             dcsr=dcsr,
+            targetting_dcsr=(financing_mode == "Target DSCR"),
         )
 
         # Calculate the LCOE for the project
@@ -84,6 +87,7 @@ def process_inputs(
             ),
             adjusted_assumptions.debt_pct_of_capital_cost,
             adjusted_assumptions.equity_pct_of_capital_cost,
+            adjusted_assumptions.dcsr,
             styled_model,
         )
 
@@ -106,7 +110,9 @@ def get_params(request: gr.Request) -> Dict:
         cost_of_equity: params.cost_of_equity,
         tax_rate: params.tax_rate,
         project_lifetime_years: params.project_lifetime_years,
+        degradation_rate: params.degradation_rate,
         dcsr: params.dcsr,
+        financing_mode: "Target DSCR" if params.targetting_dcsr else "Manual Debt/Equity Split",
     }
 
 
@@ -115,10 +121,12 @@ def get_share_url(
     capacity_factor,
     capital_expenditure_per_kw,
     o_m_cost_pct_of_capital_cost,
+    debt_pct_of_capital_cost,
     cost_of_debt,
     cost_of_equity,
     tax_rate,
     project_lifetime_years,
+    degradation_rate,
     dcsr,
     financing_mode,
     request: gr.Request,
@@ -128,11 +136,14 @@ def get_share_url(
         "capacity_factor": capacity_factor,
         "capital_expenditure_per_kw": capital_expenditure_per_kw,
         "o_m_cost_pct_of_capital_cost": o_m_cost_pct_of_capital_cost,
+        "debt_pct_of_capital_cost": debt_pct_of_capital_cost,
         "cost_of_debt": cost_of_debt,
         "cost_of_equity": cost_of_equity,
         "tax_rate": tax_rate,
         "project_lifetime_years": project_lifetime_years,
+        "degradation_rate": degradation_rate,
         "dcsr": dcsr,
+        "targetting_dcsr": financing_mode == "Target DSCR",
     }
     base_url = "?"
     return gr.Button(link=base_url + urlencode(params))
@@ -144,6 +155,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         with gr.Column(scale=8):
             gr.Markdown("# Solar PV Project Cashflow Model [API](/docs)")
         with gr.Column(scale=1):
+            submit_btn = gr.Button("Calculate", variant="primary")
             share_url = gr.Button(
                 icon="share.svg",
                 value="Share assumptions",
@@ -153,54 +165,61 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
     with gr.Row():
         with gr.Column():
             with gr.Row():
-                capacity_mw = gr.Slider(
+                capacity_mw = gr.Slider(value=30,
                     minimum=1,
                     maximum=1000,
                     step=10,
                     label="Capacity (MW)",
                 )
-                capacity_factor = gr.Slider(
+                capacity_factor = gr.Slider(value=0.1,
                     label="Capacity factor (%)",
                     minimum=0,
                     maximum=0.6,
                     step=0.01,
                 )
-                project_lifetime_years = gr.Slider(
+                project_lifetime_years = gr.Slider(value=25,
                     label="Project Lifetime (years)",
                     minimum=5,
                     maximum=50,
                     step=1,
                 )
+                degradation_rate = gr.Slider(value=0.005,
+                    label="Degradation Rate (%)",
+                    minimum=0,
+                    maximum=0.05,
+                    step=0.005,
+                )
             with gr.Row():
-                capital_expenditure_per_kw = gr.Slider(
+                capital_expenditure_per_kw = gr.Slider(value=670,
                     label="Capital expenditure ($/kW)",
                     minimum=1e2,
                     maximum=1e3,
                     step=10,
                 )
-                o_m_cost_pct_of_capital_cost = gr.Slider(
+                o_m_cost_pct_of_capital_cost = gr.Slider(value=0.02,
                     label="O&M as % of total cost (%)",
                     minimum=0,
                     maximum=0.5,
                     step=0.01,
                 )
             with gr.Row():
-                cost_of_debt = gr.Slider(
+                cost_of_debt = gr.Slider(value=0.05,
                     label="Cost of Debt (%)", minimum=0, maximum=0.5, step=0.01
                 )
-                cost_of_equity = gr.Slider(
+                cost_of_equity = gr.Slider(value=0.10,
                     label="Cost of Equity (%)",
                     minimum=0,
                     maximum=0.5,
                     step=0.01,
                 )
-                tax_rate = gr.Slider(
+                tax_rate = gr.Slider(value=0.3,
                     label="Corporate Tax Rate (%)", minimum=0, maximum=0.5, step=0.01
                 )
             with gr.Row():
                 with gr.Row():
                     debt_pct_of_capital_cost = gr.Slider(
                         label="Debt Percentage (%)",
+                        value=0.8,
                         minimum=0,
                         maximum=1,
                         step=0.01,
@@ -214,6 +233,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                         precision=2,
                     )
                     dcsr = gr.Slider(
+                        value=1.3,
                         label="Debt Service Coverage Ratio",
                         minimum=1,
                         maximum=2,
@@ -224,7 +244,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                         choices=["Target DSCR", "Manual Debt/Equity Split"],
                         value="Target DSCR",
                         show_label=False,
-                        visible=False,
+                        visible=True,
                     )
 
         with gr.Column():
@@ -244,22 +264,38 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         cost_of_equity,
         tax_rate,
         project_lifetime_years,
+        degradation_rate,
         dcsr,
+        financing_mode,
     ]
 
-    for component in input_components:
-        component.change(
-            fn=process_inputs,
-            inputs=input_components + [financing_mode],
-            outputs=[
-                json_output,
-                line_chart,
-                debt_pct_of_capital_cost,
-                equity_pct_of_capital_cost,
-                model_output,
-            ],
-            trigger_mode="always_last",
-        )
+    # for component in input_components:
+    #     component.change(
+    #         fn=process_inputs,
+    #         inputs=input_components + [financing_mode],
+    #         outputs=[
+    #             json_output,
+    #             line_chart,
+    #             debt_pct_of_capital_cost,
+    #             equity_pct_of_capital_cost,
+    #             model_output,
+    #         ],
+    #         trigger_mode="always_last",
+    #     )
+    # Remove individual component change handlers and attach to submit button
+    submit_btn.click(
+    fn=process_inputs,
+    inputs=input_components,
+    outputs=[
+        json_output,
+        line_chart,
+        debt_pct_of_capital_cost,
+        equity_pct_of_capital_cost,
+        dcsr,
+        model_output,
+    ],
+    )
+
 
     json_output.change(
         fn=get_share_url,
@@ -268,10 +304,12 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
             capacity_factor,
             capital_expenditure_per_kw,
             o_m_cost_pct_of_capital_cost,
+            debt_pct_of_capital_cost,
             cost_of_debt,
             cost_of_equity,
             tax_rate,
             project_lifetime_years,
+            degradation_rate,
             dcsr,
             financing_mode,
         ],
@@ -280,12 +318,12 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
     )
 
     interface.load(get_params, None, input_components, trigger_mode="always_last")
-    # # Run the model on first load
-    # interface.load(
-    #     process_inputs,
-    #     inputs=input_components + [financing_mode],
-    #     outputs=[json_output, line_chart,  debt_pct_of_capital_cost, equity_pct_of_capital_cost, model_output],
-    # )
+    # Run the model on first load
+    interface.load(
+        process_inputs,
+        inputs=input_components,
+        outputs=[json_output, line_chart,  debt_pct_of_capital_cost, equity_pct_of_capital_cost, dcsr, model_output],
+    )
 
     def toggle_financing_inputs(choice):
         if choice == "Target DSCR":

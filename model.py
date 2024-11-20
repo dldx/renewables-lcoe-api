@@ -30,11 +30,10 @@ def calculate_cashflow_for_renewable_project(
     Returns:
         Optional[float]: The post-tax equity IRR - cost of equity
         Tuple[pl.DataFrame, float, float, SolarPVAssumptions]: The model, post-tax equity IRR, breakeven tariff, and assumptions
-        """
+    """
 
     # Tariff must be a number
     assert tariff is not None, "Tariff must be provided"
-
 
     assumptions = assumptions.model_copy(deep=True)
     # Create a dataframe, starting with the period
@@ -53,6 +52,15 @@ def calculate_cashflow_for_renewable_project(
             .then(assumptions.capacity_factor)
             .otherwise(0),
             Tariff_per_MWh=pl.when(pl.col("Period") > 0).then(tariff).otherwise(0),
+        )
+        # Take into account degradation
+        .with_columns(
+            Capacity_Factor=pl.when(pl.col("Period") > 0)
+            .then(
+                pl.col("Capacity_Factor")
+                * (1 - assumptions.degradation_rate) ** (pl.col("Period") - 1)
+            )
+            .otherwise(0),
         )
         .with_columns(
             Total_Generation_MWh=pl.col("Capacity_MW")
@@ -79,22 +87,38 @@ def calculate_cashflow_for_renewable_project(
         )
         .with_columns(
             CFADS_mn=pl.col("EBITDA_mn"),
-        )
-        .with_columns(
-            Target_Debt_Service_mn=pl.when(pl.col("Period") == 0)
-            .then(0)
-            .otherwise(pl.col("CFADS_mn") / assumptions.dcsr),
         ))
     # Calculate DCSR-sculpted debt % of capital cost if debt % is not provided
-    if assumptions.debt_pct_of_capital_cost is None:
-        assumptions.debt_pct_of_capital_cost = pyxirr.npv(assumptions.cost_of_debt, model.select("Target_Debt_Service_mn").__array__()[0:, 0])/(assumptions.capital_cost/1000)
+    if (assumptions.debt_pct_of_capital_cost is None) or assumptions.targetting_dcsr:
+        model = (
+            model.with_columns(
+                Target_Debt_Service_mn=pl.when(pl.col("Period") == 0)
+                .then(0)
+                .otherwise(pl.col("CFADS_mn") / assumptions.dcsr),
+            )
+        )
+        assumptions.debt_pct_of_capital_cost = pyxirr.npv(
+            assumptions.cost_of_debt,
+            model.select("Target_Debt_Service_mn").__array__()[0:, 0],
+        ) / (assumptions.capital_cost / 1000)
         # print(assumptions.debt_pct_of_capital_cost)
         # assumptions.equity_pct_of_capital_cost = 1 - assumptions.debt_pct_of_capital_cost
-        assert assumptions.debt_pct_of_capital_cost + assumptions.equity_pct_of_capital_cost == 1, f"Debt and equity percentages do not add up to 100%. Debt: {assumptions.debt_pct_of_capital_cost:.0%}, Equity: {assumptions.equity_pct_of_capital_cost:.0%}"
-        assert assumptions.debt_pct_of_capital_cost >= 0 and assumptions.debt_pct_of_capital_cost <= 1, f"Debt percentage is not between 0 and 100%: {assumptions.debt_pct_of_capital_cost:.0%}"
-        assert assumptions.equity_pct_of_capital_cost >= 0 and assumptions.equity_pct_of_capital_cost <= 1, f"Equity percentage is not between 0 and 100%: {assumptions.equity_pct_of_capital_cost:.0%}"
+        assert (
+            assumptions.debt_pct_of_capital_cost
+            + assumptions.equity_pct_of_capital_cost
+            == 1
+        ), f"Debt and equity percentages do not add up to 100%. Debt: {assumptions.debt_pct_of_capital_cost:.0%}, Equity: {assumptions.equity_pct_of_capital_cost:.0%}"
+        assert (
+            assumptions.debt_pct_of_capital_cost >= 0
+            and assumptions.debt_pct_of_capital_cost <= 1
+        ), f"Debt percentage is not between 0 and 100%: {assumptions.debt_pct_of_capital_cost:.0%}"
+        assert (
+            assumptions.equity_pct_of_capital_cost >= 0
+            and assumptions.equity_pct_of_capital_cost <= 1
+        ), f"Equity percentage is not between 0 and 100%: {assumptions.equity_pct_of_capital_cost:.0%}"
 
-    model = (model.with_columns(
+    model = (
+        model.with_columns(
             Debt_Outstanding_EoP_mn=pl.when(pl.col("Period") == 0)
             .then(
                 assumptions.debt_pct_of_capital_cost * assumptions.capital_cost / 1000
@@ -107,18 +131,35 @@ def calculate_cashflow_for_renewable_project(
             .otherwise(
                 pl.col("Debt_Outstanding_EoP_mn").shift(1) * assumptions.cost_of_debt
             ),
-        )
-        .with_columns(
-            Amortization_mn=pl.when(pl.col("Period") == 0)
-            .then(0)
-            .otherwise(
-                pl.min_horizontal(
-                    pl.col("Target_Debt_Service_mn") - pl.col("Interest_Expense_mn"),
-                    pl.col("Debt_Outstanding_EoP_mn").shift(1),
-                )
-            ),
-        )
-        .with_columns(
+        ))
+    # Calculate amortization, assuming a target DSCR
+    if assumptions.targetting_dcsr:
+        model = (
+            model.with_columns(
+                Amortization_mn=pl.when(pl.col("Period") == 0)
+                .then(0)
+                .otherwise(
+                    pl.min_horizontal(
+                        pl.col("Target_Debt_Service_mn") - pl.col("Interest_Expense_mn"),
+                        pl.col("Debt_Outstanding_EoP_mn").shift(1),
+                    )
+                ),
+            ))
+    else:
+        # Calculate amortization, assuming equal amortization over the project lifetime
+        model = (
+            model.with_columns(
+                Amortization_mn=pl.when(pl.col("Period") == 0)
+                .then(0)
+                .otherwise(
+                    assumptions.debt_pct_of_capital_cost
+                    * assumptions.capital_cost
+                    / 1000
+                    / assumptions.project_lifetime_years
+                ),
+            ))
+    model = (
+        model.with_columns(
             Debt_Outstanding_EoP_mn=pl.when(pl.col("Period") == 0)
             .then(pl.col("Debt_Outstanding_EoP_mn"))
             .otherwise(
@@ -127,7 +168,8 @@ def calculate_cashflow_for_renewable_project(
         )
         .with_columns(
             Debt_Outstanding_BoP_mn=pl.col("Debt_Outstanding_EoP_mn").shift(1),
-        ))
+        )
+    )
     model = model.to_pandas()
 
     for period in model["Period"]:
@@ -135,11 +177,12 @@ def calculate_cashflow_for_renewable_project(
             model.loc[period, "Interest_Expense_mn"] = (
                 model.loc[period, "Debt_Outstanding_BoP_mn"] * assumptions.cost_of_debt
             )
-            model.loc[period, "Amortization_mn"] = min(
-                model.loc[period, "Target_Debt_Service_mn"]
-                - model.loc[period, "Interest_Expense_mn"],
-                model.loc[period, "Debt_Outstanding_BoP_mn"],
-            )
+            if assumptions.targetting_dcsr:
+                model.loc[period, "Amortization_mn"] = min(
+                    model.loc[period, "Target_Debt_Service_mn"]
+                    - model.loc[period, "Interest_Expense_mn"],
+                    model.loc[period, "Debt_Outstanding_BoP_mn"],
+                )
             model.loc[period, "Debt_Outstanding_EoP_mn"] = (
                 model.loc[period, "Debt_Outstanding_BoP_mn"]
                 - model.loc[period, "Amortization_mn"]
@@ -148,10 +191,25 @@ def calculate_cashflow_for_renewable_project(
                 model.loc[period + 1, "Debt_Outstanding_BoP_mn"] = model.loc[
                     period, "Debt_Outstanding_EoP_mn"
                 ]
+    model = pl.DataFrame(model)
+    if not assumptions.targetting_dcsr:
+        # Target debt service = Amortization + Interest
+        model = (
+            model.with_columns(
+                Target_Debt_Service_mn=pl.when(pl.col("Period") == 0)
+                .then(0)
+                .otherwise(
+                    pl.col("Amortization_mn") + pl.col("Interest_Expense_mn")
+                ),
+            )
+        )
+        # Calculate DSCR
+        assumptions.dcsr = (
+            model["EBITDA_mn"] / model["Target_Debt_Service_mn"]
+        ).min()
 
     model = (
-        pl.DataFrame(model)
-        .with_columns(
+        model.with_columns(
             # Straight line depreciation
             Depreciation_mn=pl.when(pl.col("Period") > 0)
             .then(assumptions.capital_cost / 1000 / assumptions.project_lifetime_years)
@@ -187,23 +245,30 @@ def calculate_cashflow_for_renewable_project(
         post_tax_equity_irr = irr(model["Post_Tax_Net_Equity_Cashflow_mn"].to_numpy())
     except pyxirr.InvalidPaymentsError as e:
         if assumptions.debt_pct_of_capital_cost == 1:
-            raise AssertionError("The project is fully financed by debt so equity IRR is infinite.")
+            raise AssertionError(
+                "The project is fully financed by debt so equity IRR is infinite."
+            )
         else:
             raise AssertionError(
-                f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}.")
+                f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}."
+            )
 
     if return_model:
         return model, post_tax_equity_irr, tariff, assumptions
+    assert post_tax_equity_irr is not None, "Post-tax equity IRR could not be calculated"
+    return post_tax_equity_irr - assumptions.cost_of_equity  # type: ignore
 
-    return post_tax_equity_irr - assumptions.cost_of_equity # type: ignore
 
-
-def calculate_lcoe(assumptions: SolarPVAssumptions, LCOE_guess: float = 20, iter_count: int = 0) -> Annotated[float, "LCOE"]:
+def calculate_lcoe(
+    assumptions: SolarPVAssumptions, LCOE_guess: float = 20, iter_count: int = 0
+) -> Annotated[float, "LCOE"]:
     """The LCOE is the breakeven tariff that makes the project NPV zero"""
     # Define the objective function
     objective_function = partial(calculate_cashflow_for_renewable_project, assumptions)
     if iter_count > 50:
-        raise ValueError(f"LCOE could not be calculated due to iteration limit (tariff guess: {LCOE_guess})")
+        raise ValueError(
+            f"LCOE could not be calculated due to iteration limit (tariff guess: {LCOE_guess})"
+        )
 
     try:
         lcoe = fsolve(objective_function, LCOE_guess)[0] + 0.0001
