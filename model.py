@@ -265,7 +265,7 @@ def calculate_lcoe(
     """The LCOE is the breakeven tariff that makes the project NPV zero"""
     # Define the objective function
     objective_function = partial(calculate_cashflow_for_renewable_project, assumptions)
-    if iter_count > 50:
+    if iter_count > 5000:
         raise ValueError(
             f"LCOE could not be calculated due to iteration limit (tariff guess: {LCOE_guess})"
         )
@@ -274,10 +274,10 @@ def calculate_lcoe(
         lcoe = fsolve(objective_function, LCOE_guess)[0] + 0.0001
     except ValueError as e:
         # Set LCOE lower so that fsolve can find a solution
-        LCOE_guess = 10
+        LCOE_guess = 1
         lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
     except AssertionError as e:
         # LCOE is too low
-        LCOE_guess += 30
+        LCOE_guess += 5
         lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
     return lcoe
