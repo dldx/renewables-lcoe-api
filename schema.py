@@ -83,7 +83,7 @@ class SolarPVAssumptions(BaseModel):
         float,
         Field(
             ge=1,
-            le=2,
+            le=10,
             title="Debt Service Coverage Ratio",
             description="Debt service coverage ratio",
         ),

@@ -96,7 +96,7 @@ def process_inputs(
 
 
 def update_equity_from_debt(debt_pct):
-    return 1 - debt_pct
+    return gr.update(value=1 - debt_pct)
 
 
 def get_params(request: gr.Request) -> Dict:
@@ -345,9 +345,10 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         outputs=[dcsr, debt_pct_of_capital_cost, equity_pct_of_capital_cost],
     )
 
-    # # Add debt percentage change listener
-    # debt_pct_of_capital_cost.change(
-    #     fn=update_equity_from_debt,
-    #     inputs=[debt_pct_of_capital_cost],
-    #     outputs=[equity_pct_of_capital_cost]
-    # )
+    # Add debt percentage change listener
+    debt_pct_of_capital_cost.change(
+        fn=update_equity_from_debt,
+        inputs=[debt_pct_of_capital_cost],
+        outputs=[equity_pct_of_capital_cost],
+        trigger_mode="always_last"
+    )
