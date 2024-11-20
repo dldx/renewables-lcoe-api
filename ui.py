@@ -396,6 +396,9 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                 cashflow_bar_chart = gr.Plot()
     with gr.Row():
         model_output = gr.Matrix(headers=None, max_height=800)
+    with gr.Row():
+        with gr.Column(scale=1):
+            gr.Button(link="https://github.com/dldx/renewables-lcoe-api", value="Source Code", variant="secondary", size="sm")
 
     # Set up event handlers for all inputs
     input_components = [

@@ -3,7 +3,9 @@ from pydantic import BaseModel, Field, computed_field, field_validator, model_va
 
 
 class SolarPVAssumptions(BaseModel):
-    capacity_mw: Annotated[float, Field(ge=1, le=1000, title="Capacity (MW)")] = 30
+    capacity_mw: Annotated[
+        float, Field(ge=1, le=1000, title="Capacity (MW)", description="Capacity in MW")
+    ] = 30
     capacity_factor: Annotated[
         float,
         Field(
@@ -93,43 +95,75 @@ class SolarPVAssumptions(BaseModel):
         Field(
             title="Target DSCR?",
             description="Whether to target the DSCR or the debt percentage. If True, the DCSR will be used to calculate the debt percentage.",
-        )
+        ),
     ] = True
 
     @model_validator(mode="after")
     def check_sum_of_parts(self):
         if not self.targetting_dcsr:
-            assert self.debt_pct_of_capital_cost is not None, "Debt percentage must be provided"
+            assert (
+                self.debt_pct_of_capital_cost is not None
+            ), "Debt percentage must be provided"
             if self.debt_pct_of_capital_cost + self.equity_pct_of_capital_cost != 1:
                 raise ValueError("Debt and equity percentages must sum to 1")
         return self
 
     @computed_field
     @property
-    def capital_cost(self) -> Annotated[float,
-                                        Field(title="Capital Cost ($)", description="Total capital cost")]:
+    def capital_cost(
+        self,
+    ) -> Annotated[
+        float, Field(title="Capital Cost ($)", description="Total capital cost")
+    ]:
         return self.capacity_mw * self.capital_expenditure_per_kw * 1000
 
     @computed_field
     @property
-    def tax_adjusted_WACC(self) -> Annotated[Optional[float],
-                                             Field(title="Tax Adjusted WACC (%)",
-                                                   description="Tax adjusted weighted average cost of capital")]:
-        if (self.debt_pct_of_capital_cost is not None) and (self.equity_pct_of_capital_cost is not None):
-            return (self.debt_pct_of_capital_cost * self.cost_of_debt * (1 - self.tax_rate) +
-                    self.equity_pct_of_capital_cost * self.cost_of_equity)
+    def tax_adjusted_WACC(
+        self,
+    ) -> Annotated[
+        Optional[float],
+        Field(
+            title="Tax Adjusted WACC (%)",
+            description="Tax adjusted weighted average cost of capital",
+        ),
+    ]:
+        if (self.debt_pct_of_capital_cost is not None) and (
+            self.equity_pct_of_capital_cost is not None
+        ):
+            return (
+                self.debt_pct_of_capital_cost * self.cost_of_debt * (1 - self.tax_rate)
+                + self.equity_pct_of_capital_cost * self.cost_of_equity
+            )
 
     @computed_field
     @property
-    def wacc(self) -> Annotated[Optional[float], Field(title="WACC (%)", description="Weighted average cost of capital")]:
-        if self.debt_pct_of_capital_cost is not None and self.equity_pct_of_capital_cost is not None:
-            return self.debt_pct_of_capital_cost * self.cost_of_debt + self.equity_pct_of_capital_cost * self.cost_of_equity
+    def wacc(
+        self,
+    ) -> Annotated[
+        Optional[float],
+        Field(title="WACC (%)", description="Weighted average cost of capital"),
+    ]:
+        if (
+            self.debt_pct_of_capital_cost is not None
+            and self.equity_pct_of_capital_cost is not None
+        ):
+            return (
+                self.debt_pct_of_capital_cost * self.cost_of_debt
+                + self.equity_pct_of_capital_cost * self.cost_of_equity
+            )
 
     @computed_field
     @property
-    def equity_pct_of_capital_cost(self) -> Annotated[Optional[float],
-                                                     Field(title="Equity Percentage (%)",
-                                                           description="Equity as a percentage of capital expenditure")]:
+    def equity_pct_of_capital_cost(
+        self,
+    ) -> Annotated[
+        Optional[float],
+        Field(
+            title="Equity Percentage (%)",
+            description="Equity as a percentage of capital expenditure",
+        ),
+    ]:
         if self.debt_pct_of_capital_cost is not None:
             return 1 - self.debt_pct_of_capital_cost
 
@@ -137,6 +171,7 @@ class SolarPVAssumptions(BaseModel):
     @classmethod
     def empty_str_to_none(cls, values):
         if isinstance(values, dict):
-            return {k: (None if v == '' or v == "None" else v) for k, v in values.items()}
+            return {
+                k: (None if v == "" or v == "None" else v) for k, v in values.items()
+            }
         return values
-
