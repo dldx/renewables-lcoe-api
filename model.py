@@ -1,4 +1,4 @@
-from typing import Annotated, Tuple
+from typing import Annotated, Iterable, Optional, Tuple
 import numpy as np
 import polars as pl
 from pyxirr import irr, npv
@@ -10,9 +10,9 @@ from schema import SolarPVAssumptions
 
 
 def calculate_cashflow_for_renewable_project(
-    assumptions: SolarPVAssumptions, tariff: float, return_model=False
+    assumptions: SolarPVAssumptions, tariff: float | Iterable, return_model=False
 ) -> (
-    Annotated[float, "Post-tax equity IRR - Cost of equity"]
+    Annotated[Optional[float], "Post-tax equity IRR - Cost of equity"]
     | Tuple[
         Annotated[pl.DataFrame, "Cashflow model"],
         Annotated[float | None, "Post-tax equity IRR"],
@@ -20,6 +20,22 @@ def calculate_cashflow_for_renewable_project(
         Annotated[SolarPVAssumptions, "Assumptions"],
     ]
 ):
+    """Calculate the cashflow for a renewable energy project
+
+    Args:
+        assumptions (SolarPVAssumptions): The assumptions for the project
+        tariff (float): The tariff for the project
+        return_model (bool, optional): Whether to return the model. Defaults to False.
+
+    Returns:
+        Optional[float]: The post-tax equity IRR - cost of equity
+        Tuple[pl.DataFrame, float, float, SolarPVAssumptions]: The model, post-tax equity IRR, breakeven tariff, and assumptions
+        """
+
+    # Tariff must be a number
+    assert tariff is not None, "Tariff must be provided"
+
+
     assumptions = assumptions.model_copy(deep=True)
     # Create a dataframe, starting with the period
     model = pl.DataFrame(
@@ -72,10 +88,11 @@ def calculate_cashflow_for_renewable_project(
     # Calculate DCSR-sculpted debt % of capital cost if debt % is not provided
     if assumptions.debt_pct_of_capital_cost is None:
         assumptions.debt_pct_of_capital_cost = pyxirr.npv(assumptions.cost_of_debt, model.select("Target_Debt_Service_mn").__array__()[0:, 0])/(assumptions.capital_cost/1000)
+        # print(assumptions.debt_pct_of_capital_cost)
         # assumptions.equity_pct_of_capital_cost = 1 - assumptions.debt_pct_of_capital_cost
-        assert assumptions.debt_pct_of_capital_cost + assumptions.equity_pct_of_capital_cost == 1
-        assert assumptions.debt_pct_of_capital_cost >= 0 and assumptions.debt_pct_of_capital_cost <= 1
-        assert assumptions.equity_pct_of_capital_cost >= 0 and assumptions.equity_pct_of_capital_cost <= 1
+        assert assumptions.debt_pct_of_capital_cost + assumptions.equity_pct_of_capital_cost == 1, f"Debt and equity percentages do not add up to 100%. Debt: {assumptions.debt_pct_of_capital_cost:.0%}, Equity: {assumptions.equity_pct_of_capital_cost:.0%}"
+        assert assumptions.debt_pct_of_capital_cost >= 0 and assumptions.debt_pct_of_capital_cost <= 1, f"Debt percentage is not between 0 and 100%: {assumptions.debt_pct_of_capital_cost:.0%}"
+        assert assumptions.equity_pct_of_capital_cost >= 0 and assumptions.equity_pct_of_capital_cost <= 1, f"Equity percentage is not between 0 and 100%: {assumptions.equity_pct_of_capital_cost:.0%}"
 
     model = (model.with_columns(
             Debt_Outstanding_EoP_mn=pl.when(pl.col("Period") == 0)
@@ -169,11 +186,15 @@ def calculate_cashflow_for_renewable_project(
     try:
         post_tax_equity_irr = irr(model["Post_Tax_Net_Equity_Cashflow_mn"].to_numpy())
     except pyxirr.InvalidPaymentsError as e:
-        raise ValueError(
-            f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}.")
+        if assumptions.debt_pct_of_capital_cost == 1:
+            raise AssertionError("The project is fully financed by debt so equity IRR is infinite.")
+        else:
+            raise AssertionError(
+                f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}.")
 
     if return_model:
         return model, post_tax_equity_irr, tariff, assumptions
+
     return post_tax_equity_irr - assumptions.cost_of_equity # type: ignore
 
 
@@ -181,8 +202,8 @@ def calculate_lcoe(assumptions: SolarPVAssumptions, LCOE_guess: float = 20, iter
     """The LCOE is the breakeven tariff that makes the project NPV zero"""
     # Define the objective function
     objective_function = partial(calculate_cashflow_for_renewable_project, assumptions)
-    if iter_count > 10:
-        raise ValueError("LCOE could not be calculated")
+    if iter_count > 50:
+        raise ValueError(f"LCOE could not be calculated due to iteration limit (tariff guess: {LCOE_guess})")
 
     try:
         lcoe = fsolve(objective_function, LCOE_guess)[0] + 0.0001
@@ -192,6 +213,6 @@ def calculate_lcoe(assumptions: SolarPVAssumptions, LCOE_guess: float = 20, iter
         lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
     except AssertionError as e:
         # LCOE is too low
-        LCOE_guess += 10
+        LCOE_guess += 30
         lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
     return lcoe
