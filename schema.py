@@ -72,6 +72,15 @@ class SolarPVAssumptions(BaseModel):
             description="Project lifetime in years",
         ),
     ] = 25
+    loan_tenor_years: Annotated[
+        Optional[int],
+        Field(
+            ge=5,
+            le=50,
+            title="Loan Tenor (years)",
+            description="Loan tenor in years",
+        ),
+    ] = 25
     degradation_rate: Annotated[
         float,
         Field(
@@ -81,8 +90,8 @@ class SolarPVAssumptions(BaseModel):
             description="Annual degradation rate as a decimal, e.g., 0.01 for 1%",
         ),
     ] = 0.005
-    dcsr: Annotated[
-        float,
+    dscr: Annotated[
+        Optional[float],
         Field(
             ge=1,
             le=10,
@@ -90,17 +99,17 @@ class SolarPVAssumptions(BaseModel):
             description="Debt service coverage ratio",
         ),
     ] = 1.3
-    targetting_dcsr: Annotated[
+    targetting_dscr: Annotated[
         bool,
         Field(
             title="Target DSCR?",
-            description="Whether to target the DSCR or the debt percentage. If True, the DCSR will be used to calculate the debt percentage.",
+            description="Whether to target the DSCR or the debt percentage. If True, the DSCR will be used to calculate the debt percentage.",
         ),
     ] = True
 
     @model_validator(mode="after")
     def check_sum_of_parts(self):
-        if not self.targetting_dcsr:
+        if not self.targetting_dscr:
             assert (
                 self.debt_pct_of_capital_cost is not None
             ), "Debt percentage must be provided"
@@ -176,6 +185,18 @@ class SolarPVAssumptions(BaseModel):
             }
         return values
 
+    @model_validator(mode="before")
+    @classmethod
+    def loan_tenor_less_than_lifetime(cls, values):
+        # If loan tenor is not provided, set it to project lifetime
+        if values.get("loan_tenor_years") is None or values.get("loan_tenor_years") == "None":
+            values["loan_tenor_years"] = values.get("project_lifetime_years")
+        # Check that loan tenor is less than or equal to project lifetime
+        if values.get("loan_tenor_years") is not None:
+            if values.get("loan_tenor_years", 25) > values.get("project_lifetime_years", 25):
+                raise ValueError("Loan tenor must be less than or equal to project lifetime")
+        return values
+
 class Location(BaseModel):
     longitude: Annotated[Optional[float], Field(ge=-180, le=180,
                                         title="Longitude",
@@ -190,13 +211,13 @@ class Location(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def empty_str_to_none(cls, values):
+    def zeroes_to_none(cls, values):
         """Convert empty strings or 0s to None"""
-        if values.get("address") == "":
+        if values.get("address") == "" or values.get("address") == "None":
             values["address"] = None
-        if values.get("longitude") == 0:
+        if values.get("longitude") == 0 or values.get("longitude") == "None":
             values["longitude"] = None
-        if values.get("latitude") == 0:
+        if values.get("latitude") == 0 or values.get("latitude") == "None":
             values["latitude"] = None
         return values
 

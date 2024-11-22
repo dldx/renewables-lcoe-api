@@ -56,9 +56,9 @@ def plot_revenues_costs(cashflow_model: pd.DataFrame) -> gr.Plot:
     df["Total Operating Costs"] = -df["Total_Operating_Costs_mn"] * 1000
     df["Total Revenues"] = df["Total_Revenues_mn"] * 1000
     df["Target Debt Service"] = df["Target_Debt_Service_mn"] * 1000
-    df["DCSR"] = df["CFADS_mn"] / df["Target_Debt_Service_mn"]
+    df["DSCR"] = df["CFADS_mn"] / df["Target_Debt_Service_mn"]
     # Round the values to 4 decimal places
-    df["DCSR"] = df["DCSR"].round(4)
+    df["DSCR"] = df["DSCR"].round(4)
 
     # Create a new dataframe with the required columns
     plot_df = df[
@@ -118,13 +118,13 @@ def plot_revenues_costs(cashflow_model: pd.DataFrame) -> gr.Plot:
         )
     )
 
-    # Add the DCSR line
+    # Add the DSCR line
     subfig.add_trace(
         go.Scatter(
             x=df["Period"],
-            y=df["DCSR"],
+            y=df["DSCR"],
             mode="lines+markers",
-            name="DCSR",
+            name="DSCR",
             line=dict(color="purple"),
         ),
         secondary_y=True,
@@ -140,10 +140,10 @@ def plot_revenues_costs(cashflow_model: pd.DataFrame) -> gr.Plot:
         ),
         margin=dict(l=50, r=50, t=130, b=50),
         barmode="overlay",
-        title="Total Revenues, Total Operating Costs, and DCSR",
+        title="Total Revenues, Total Operating Costs, and DSCR",
         xaxis_title="Year",
         yaxis_title="Amount",
-        yaxis2_title="DCSR",
+        yaxis2_title="DSCR",
     )
     return subfig
 
@@ -158,8 +158,9 @@ def trigger_lcoe(
     cost_of_equity,
     tax_rate,
     project_lifetime_years,
+    loan_tenor_years,
     degradation_rate,
-    dcsr,
+    dscr,
     financing_mode,
     request: gr.Request,
 ) -> Tuple[
@@ -181,9 +182,10 @@ def trigger_lcoe(
             cost_of_equity=cost_of_equity,
             tax_rate=tax_rate,
             project_lifetime_years=project_lifetime_years,
+            loan_tenor_years=loan_tenor_years,
             degradation_rate=degradation_rate,
-            dcsr=dcsr,
-            targetting_dcsr=(financing_mode == "Target DSCR"),
+            dscr=dscr,
+            targetting_dscr=(financing_mode == "Target DSCR"),
         )
 
         # Calculate the LCOE for the project
@@ -203,16 +205,16 @@ def trigger_lcoe(
             {
                 "lcoe": lcoe,
                 "post_tax_equity_irr": post_tax_equity_irr,
-                "debt_service_coverage_ratio": dcsr,
+                "debt_service_coverage_ratio": adjusted_assumptions.dscr,
                 "debt_pct_of_capital_cost": adjusted_assumptions.debt_pct_of_capital_cost,
                 "equity_pct_of_capital_cost": adjusted_assumptions.debt_pct_of_capital_cost,
-                "api_call": f"{request.request.url.scheme}://{request.request.url.netloc}/solarpv/?{urlencode(assumptions.model_dump())}",
+                "api_call": f"{request.request.url.scheme}://{request.request.url.netloc}/solarpv/lcoe?{urlencode(assumptions.model_dump())}",
             },
             plot_cashflow(cashflow_model),
             plot_revenues_costs(cashflow_model),
             adjusted_assumptions.debt_pct_of_capital_cost,
             adjusted_assumptions.equity_pct_of_capital_cost,
-            adjusted_assumptions.dcsr,
+            adjusted_assumptions.dscr,
             styled_model,
             gr.Markdown(f"## LCOE: {lcoe:,.2f}"),
         )
@@ -227,6 +229,13 @@ def update_equity_from_debt(debt_pct):
 
 def get_params(request: gr.Request) -> Dict:
     params = SolarPVAssumptions.model_validate(dict(request.query_params))
+    location_params = dict(longitude=request.query_params.get("longitude"), latitude=request.query_params.get("latitude"), address=request.query_params.get("address"))
+    for key in location_params:
+        if location_params[key] == "None":
+            location_params[key] = None
+        if location_params[key] is not None and key in ["latitude", "longitude"]:
+            location_params[key] = float(location_params[key])
+
     return {
         capacity_mw: params.capacity_mw,
         capacity_factor: params.capacity_factor,
@@ -236,11 +245,16 @@ def get_params(request: gr.Request) -> Dict:
         cost_of_equity: params.cost_of_equity,
         tax_rate: params.tax_rate,
         project_lifetime_years: params.project_lifetime_years,
+        loan_tenor_years: params.loan_tenor_years if params.loan_tenor_years else params.project_lifetime_years,
         degradation_rate: params.degradation_rate,
-        dcsr: params.dcsr,
+        debt_pct_of_capital_cost: params.debt_pct_of_capital_cost,
+        dscr: params.dscr,
         financing_mode: (
-            "Target DSCR" if params.targetting_dcsr else "Manual Debt/Equity Split"
+            "Target DSCR" if params.targetting_dscr else "Manual Debt/Equity Split"
         ),
+        latitude: location_params["latitude"],
+        longitude: location_params["longitude"],
+        address: location_params["address"],
     }
 
 
@@ -254,9 +268,13 @@ def get_share_url(
     cost_of_equity,
     tax_rate,
     project_lifetime_years,
+    loan_tenor_years,
     degradation_rate,
-    dcsr,
+    dscr,
     financing_mode,
+    latitude,
+    longitude,
+    address,
     request: gr.Request,
 ):
     params = {
@@ -269,9 +287,13 @@ def get_share_url(
         "cost_of_equity": cost_of_equity,
         "tax_rate": tax_rate,
         "project_lifetime_years": project_lifetime_years,
+        "loan_tenor_years": loan_tenor_years,
         "degradation_rate": degradation_rate,
-        "dcsr": dcsr,
-        "targetting_dcsr": financing_mode == "Target DSCR",
+        "dscr": dscr,
+        "targetting_dscr": financing_mode == "Target DSCR",
+        "latitude": latitude if latitude != 51.5074 else None,
+        "longitude": longitude if longitude != -0.1278 else None,
+        "address": address if address else None,
     }
     base_url = "?"
     return gr.Button(link=base_url + urlencode(params))
@@ -330,13 +352,6 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                     maximum=0.6,
                     step=0.01,
                 )
-                project_lifetime_years = gr.Slider(
-                    value=25,
-                    label="Project Lifetime (years)",
-                    minimum=5,
-                    maximum=50,
-                    step=1,
-                )
                 degradation_rate = gr.Slider(
                     value=0.005,
                     label="Degradation Rate (%)",
@@ -345,11 +360,26 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                     step=0.005,
                 )
             with gr.Row():
+                project_lifetime_years = gr.Slider(
+                    value=25,
+                    label="Project Lifetime (years)",
+                    minimum=5,
+                    maximum=50,
+                    step=1,
+                )
+                loan_tenor_years = gr.Slider(
+                    value=25,
+                    label="Loan Tenor (years)",
+                    minimum=5,
+                    maximum=50,
+                    step=1,
+                )
+            with gr.Row():
                 capital_expenditure_per_kw = gr.Slider(
                     value=670,
                     label="Capital expenditure ($/kW)",
                     minimum=1e2,
-                    maximum=1e3,
+                    maximum=5e3,
                     step=10,
                 )
                 o_m_cost_pct_of_capital_cost = gr.Slider(
@@ -398,7 +428,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
                         interactive=False,
                         precision=2,
                     )
-                    dcsr = gr.Slider(
+                    dscr = gr.Slider(
                         value=1.3,
                         label="Debt Service Coverage Ratio",
                         minimum=1,
@@ -441,8 +471,9 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         cost_of_equity,
         tax_rate,
         project_lifetime_years,
+        loan_tenor_years,
         degradation_rate,
-        dcsr,
+        dscr,
         financing_mode,
     ]
 
@@ -457,7 +488,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
             revenue_cost_chart,
             debt_pct_of_capital_cost,
             equity_pct_of_capital_cost,
-            dcsr,
+            dscr,
             model_output,
             lcoe_result,
         ],
@@ -465,13 +496,28 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
 
     json_output.change(
         fn=get_share_url,
-        inputs=input_components,
+        inputs=input_components
+        + [
+            latitude,
+            longitude,
+            address,
+        ],
         outputs=share_url,
         trigger_mode="always_last",
     )
 
     # Load URL parameters into assumptions and then trigger the process_inputs function
-    interface.load(get_params, None, input_components, trigger_mode="always_last").then(
+    interface.load(
+        get_params,
+        None,
+        input_components
+        + [
+            latitude,
+            longitude,
+            address,
+        ],
+        trigger_mode="always_last",
+    ).then(
         trigger_lcoe,
         inputs=input_components,
         outputs=[
@@ -480,7 +526,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
             revenue_cost_chart,
             debt_pct_of_capital_cost,
             equity_pct_of_capital_cost,
-            dcsr,
+            dscr,
             model_output,
             lcoe_result,
         ],
@@ -489,19 +535,19 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
     def toggle_financing_inputs(choice):
         if choice == "Target DSCR":
             return {
-                dcsr: gr.update(interactive=True),
+                dscr: gr.update(interactive=True),
                 debt_pct_of_capital_cost: gr.update(interactive=False),
             }
         else:
             return {
-                dcsr: gr.update(interactive=False),
+                dscr: gr.update(interactive=False),
                 debt_pct_of_capital_cost: gr.update(interactive=True),
             }
 
     financing_mode.change(
         fn=toggle_financing_inputs,
         inputs=[financing_mode],
-        outputs=[dcsr, debt_pct_of_capital_cost, equity_pct_of_capital_cost],
+        outputs=[dscr, debt_pct_of_capital_cost, equity_pct_of_capital_cost],
     )
 
     # Add debt percentage change listener
@@ -525,7 +571,8 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
             pv_location.address,
         )
 
-    gr.on([estimate_capacity_factor.click, interface.load],
+    gr.on(
+        [estimate_capacity_factor.click, interface.load],
         fn=get_capacity_factor_from_location,
         inputs=[latitude, longitude, address],
         outputs=[capacity_factor, latitude, longitude, address],
@@ -533,7 +580,9 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
 
     def update_location_plot(latitude, longitude, address):
         return px.scatter_mapbox(
-            pd.DataFrame({"latitude": [latitude], "longitude": [longitude], "address": [address]}),
+            pd.DataFrame(
+                {"latitude": [latitude], "longitude": [longitude], "address": [address]}
+            ),
             lat="latitude",
             lon="longitude",
             mapbox_style="carto-darkmatter",
@@ -544,7 +593,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
             mapbox=dict(
                 center=dict(lat=latitude, lon=longitude),
                 zoom=10,
-            )
+            ),
         )
 
     gr.on(
@@ -559,4 +608,16 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         fn=lambda: (None, None),
         inputs=[],
         outputs=[latitude, longitude],
+    )
+
+    # If user changes the project lifetime, set the maximum loan tenor to the project lifetime
+    def update_loan_tenor(project_lifetime_years, loan_tenor_years):
+        if project_lifetime_years < loan_tenor_years:
+            return gr.Slider(value=project_lifetime_years, maximum=project_lifetime_years)
+        return gr.Slider(maximum=project_lifetime_years)
+
+    project_lifetime_years.change(
+        fn=update_loan_tenor,
+        inputs=[project_lifetime_years, loan_tenor_years],
+        outputs=[loan_tenor_years],
     )

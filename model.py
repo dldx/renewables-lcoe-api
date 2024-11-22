@@ -88,18 +88,18 @@ def calculate_cashflow_for_renewable_project(
         .with_columns(
             CFADS_mn=pl.col("EBITDA_mn"),
         ))
-    # Calculate DCSR-sculpted debt % of capital cost if debt % is not provided
-    if (assumptions.debt_pct_of_capital_cost is None) or assumptions.targetting_dcsr:
+    # Calculate DSCR-sculpted debt % of capital cost if debt % is not provided
+    if (assumptions.debt_pct_of_capital_cost is None) or assumptions.targetting_dscr:
         model = (
             model.with_columns(
-                Target_Debt_Service_mn=pl.when(pl.col("Period") == 0)
+                Target_Debt_Service_mn=pl.when((pl.col("Period") == 0) | (pl.col("Period") > assumptions.loan_tenor_years))
                 .then(0)
-                .otherwise(pl.col("CFADS_mn") / assumptions.dcsr),
+                .otherwise(pl.col("CFADS_mn") / assumptions.dscr),
             )
         )
         assumptions.debt_pct_of_capital_cost = pyxirr.npv(
             assumptions.cost_of_debt,
-            model.select("Target_Debt_Service_mn").__array__()[0:, 0],
+            model.select("Target_Debt_Service_mn").__array__()[0:assumptions.loan_tenor_years+1, 0],
         ) / (assumptions.capital_cost / 1000)
         # print(assumptions.debt_pct_of_capital_cost)
         # assumptions.equity_pct_of_capital_cost = 1 - assumptions.debt_pct_of_capital_cost
@@ -133,7 +133,7 @@ def calculate_cashflow_for_renewable_project(
             ),
         ))
     # Calculate amortization, assuming a target DSCR
-    if assumptions.targetting_dcsr:
+    if assumptions.targetting_dscr:
         model = (
             model.with_columns(
                 Amortization_mn=pl.when(pl.col("Period") == 0)
@@ -149,13 +149,13 @@ def calculate_cashflow_for_renewable_project(
         # Calculate amortization, assuming equal amortization over the project lifetime
         model = (
             model.with_columns(
-                Amortization_mn=pl.when(pl.col("Period") == 0)
+                Amortization_mn=pl.when((pl.col("Period") == 0) | (pl.col("Period") > assumptions.loan_tenor_years))
                 .then(0)
                 .otherwise(
                     assumptions.debt_pct_of_capital_cost
                     * assumptions.capital_cost
                     / 1000
-                    / assumptions.project_lifetime_years
+                    / assumptions.loan_tenor_years
                 ),
             ))
     model = (
@@ -177,7 +177,7 @@ def calculate_cashflow_for_renewable_project(
             model.loc[period, "Interest_Expense_mn"] = (
                 model.loc[period, "Debt_Outstanding_BoP_mn"] * assumptions.cost_of_debt
             )
-            if assumptions.targetting_dcsr:
+            if assumptions.targetting_dscr:
                 model.loc[period, "Amortization_mn"] = min(
                     model.loc[period, "Target_Debt_Service_mn"]
                     - model.loc[period, "Interest_Expense_mn"],
@@ -187,12 +187,12 @@ def calculate_cashflow_for_renewable_project(
                 model.loc[period, "Debt_Outstanding_BoP_mn"]
                 - model.loc[period, "Amortization_mn"]
             )
-            if period < assumptions.project_lifetime_years:
+            if period < assumptions.loan_tenor_years:
                 model.loc[period + 1, "Debt_Outstanding_BoP_mn"] = model.loc[
                     period, "Debt_Outstanding_EoP_mn"
                 ]
     model = pl.DataFrame(model)
-    if not assumptions.targetting_dcsr:
+    if not assumptions.targetting_dscr:
         # Target debt service = Amortization + Interest
         model = (
             model.with_columns(
@@ -204,7 +204,7 @@ def calculate_cashflow_for_renewable_project(
             )
         )
         # Calculate DSCR
-        assumptions.dcsr = (
+        assumptions.dscr = (
             model["EBITDA_mn"] / model["Target_Debt_Service_mn"]
         ).min()
 

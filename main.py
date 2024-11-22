@@ -41,7 +41,7 @@ app.add_middleware(
 #     return RedirectResponse(redirect_url)
 
 
-@app.get("/solarpv")
+@app.get("/solarpv/lcoe")
 def get_lcoe(pv_assumptions: Annotated[SolarPVAssumptions, Query()]):
     return calculate_lcoe(pv_assumptions)
 
