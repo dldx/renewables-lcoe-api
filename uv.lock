@@ -7,6 +7,15 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "affine"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/98/d2f0bb06385069e799fc7d2870d9e078cfa0fa396dc8a2b81227d0da08b9/affine-2.4.0.tar.gz", hash = "sha256:a24d818d6a836c131976d22f8c27b8d3ca32d0af64c1d8d29deb7bafa4da1eea", size = 17132 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/f7/85273299ab57117850cc0a936c64151171fac4da49bc6fba0dad984a7c5f/affine-2.4.0-py3-none-any.whl", hash = "sha256:8a3df80e2b2378aef598a83c1392efd47967afec4242021a0b06b4c7cbc61a92", size = 15662 },
+]
+
+[[package]]
 name = "aiofiles"
 version = "23.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -225,6 +234,30 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941 },
+]
+
+[[package]]
+name = "click-plugins"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/1d/45434f64ed749540af821fd7e42b8e4d23ac04b1eda7c26613288d6cd8a8/click-plugins-1.1.1.tar.gz", hash = "sha256:46ab999744a9d831159c3411bb0c79346d94a444df9a3a3742e9ed63645f264b", size = 8164 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/da/824b92d9942f4e472702488857914bdd50f73021efea15b4cad9aca8ecef/click_plugins-1.1.1-py2.py3-none-any.whl", hash = "sha256:5d262006d3222f5057fd81e1623d4443e41dcda5dc815c06b442aa3c02889fc8", size = 7497 },
+]
+
+[[package]]
+name = "cligj"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ea/0d/837dbd5d8430fd0f01ed72c4cfb2f548180f4c68c635df84ce87956cff32/cligj-0.7.2.tar.gz", hash = "sha256:a4bc13d623356b373c2c27c53dbd9c68cae5d526270bfa71f6c6fa69669c6b27", size = 9803 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/73/86/43fa9f15c5b9fb6e82620428827cd3c284aa933431405d1bcf5231ae3d3e/cligj-0.7.2-py3-none-any.whl", hash = "sha256:c1ca117dbce1fe20a5809dc96f01e1c2840f6dcc939b3ddbb1111bf330ba82df", size = 7069 },
 ]
 
 [[package]]
@@ -1184,6 +1217,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyparsing"
+version = "3.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8c/d5/e5aeee5387091148a19e1145f63606619cb5f20b83fccb63efae6474e7b2/pyparsing-3.2.0.tar.gz", hash = "sha256:cbf74e27246d595d9a74b186b810f6fbb86726dbf3b9532efb343f6d7294fe9c", size = 920984 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/ec/2eb3cd785efd67806c46c13a17339708ddc346cbb684eade7a6e6f79536a/pyparsing-3.2.0-py3-none-any.whl", hash = "sha256:93d9577b88da0bbea8cc8334ee8b918ed014968fd2ec383e868fb8afb1ccef84", size = 106921 },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
@@ -1377,6 +1419,36 @@ wheels = [
 ]
 
 [[package]]
+name = "rasterio"
+version = "1.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "affine" },
+    { name = "attrs" },
+    { name = "certifi" },
+    { name = "click" },
+    { name = "click-plugins" },
+    { name = "cligj" },
+    { name = "numpy" },
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/48/fcd02399c7c4041c850b59c7cd80c309f7b87c86649e2bfb515d44ad061c/rasterio-1.4.2.tar.gz", hash = "sha256:1be35ccb4d998a4c48fa51bbee9e37927ecd9b9e954a2b2581b8f3e9bb165332", size = 441402 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/1d/ebdadd0b74704e09553753b23510fbd43fb7d9c2de468d5cf4ac223a4087/rasterio-1.4.2-cp311-cp311-macosx_10_15_x86_64.whl", hash = "sha256:019e6fbfea250fea91987a38abc7a02c752b50beadb3178d82a5d47e8e265313", size = 21535160 },
+    { url = "https://files.pythonhosted.org/packages/09/b9/169a76e257e527d352da021da6602480a829eac03b0ab3045639c3f80fb6/rasterio-1.4.2-cp311-cp311-macosx_14_0_arm64.whl", hash = "sha256:a9830e0c9d09d2680079b8a31085cc2a2b885b1ed6c4d95d2a91e2813efc22aa", size = 18757255 },
+    { url = "https://files.pythonhosted.org/packages/8c/58/25a6531d8b578493c66a672c0ea47c976c4e702979d4d18cb538789a30a3/rasterio-1.4.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ea3f38da794e7a4df409f2c57799a26a777a2560025ad401fe33a0b8efe90a5a", size = 22199148 },
+    { url = "https://files.pythonhosted.org/packages/4d/38/9bc2bd4b2df4527debd278011e917cc085007e6cf60c9ec44fea38cb8a7a/rasterio-1.4.2-cp311-cp311-win_amd64.whl", hash = "sha256:0c74d6a2e64fae6c2293bf520fa4048e12598379736953c34ca3dfb058cedfc5", size = 25446955 },
+    { url = "https://files.pythonhosted.org/packages/d5/a1/cd3b8592322d5e898acab6447819df3d9a5fe1bf9c966d4d8146d0b880c6/rasterio-1.4.2-cp312-cp312-macosx_10_15_x86_64.whl", hash = "sha256:84ce104a3017c04bfb809f268faaef4287458916f7af4f25a39b93f420fa8ef4", size = 21507014 },
+    { url = "https://files.pythonhosted.org/packages/6c/af/494772e3ba2e9c70321f83ed631d12ff3d5f957a17abf183e039bb793053/rasterio-1.4.2-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:856c740e621211a19f0efddc2f0a61cc3d37c89c50699ea6cb249da3930d601b", size = 18729674 },
+    { url = "https://files.pythonhosted.org/packages/2b/bb/52089954facaf6ec9edbbcc837b9de3ea5cb34a413481507870c0ad86a8a/rasterio-1.4.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:43a21306c8dc265f50d3cb8a13a58d50e055477ace1003bb8a507658a4124c37", size = 22246339 },
+    { url = "https://files.pythonhosted.org/packages/97/ae/388db0a3ad01b273d183fb9204b33d8a2d45c6fbd385f6ff11bc713f5ca4/rasterio-1.4.2-cp312-cp312-win_amd64.whl", hash = "sha256:83bf03b39dc7e1d932907d1b05d99a53b7fc184c215a27b938f4697db7295f53", size = 25424737 },
+    { url = "https://files.pythonhosted.org/packages/4c/b1/f12bc309403f2b4f6c0ebb5fdc93f2506358b85864f7b3a1bc66ca8cecf5/rasterio-1.4.2-cp313-cp313-macosx_10_15_x86_64.whl", hash = "sha256:e405e92ab03f5606a959d4a7d9ae1589e2212f9720c2db55853bfa8c91f6d736", size = 21525903 },
+    { url = "https://files.pythonhosted.org/packages/5a/a8/1a4d5cbeb17310595928801dd2d1500f9d094c97893afc0ed11f9639a008/rasterio-1.4.2-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:7dbf3d084e1f72f322d378eb2b9e155fbe0ead97f0a1b0065a389e9435a5a3db", size = 18724884 },
+    { url = "https://files.pythonhosted.org/packages/90/4c/6990768de10ae2be50dc70365dfed7c3181501bf0173e6aeed867b061c06/rasterio-1.4.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c6f2952e1b4ad01f0dcf97f477050d8122ca781abbb3ef8b5a5751835a222317", size = 22231293 },
+    { url = "https://files.pythonhosted.org/packages/29/7b/ddbd284fa466221f38c339b218a66da3512ad7fa736318c727577c7d4371/rasterio-1.4.2-cp313-cp313-win_amd64.whl", hash = "sha256:25ec2a35548c1c45ea1dd5341e777e5aeea8f79310bbae6aaed4d5f6a4c53f26", size = 25419426 },
+]
+
+[[package]]
 name = "referencing"
 version = "0.35.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1405,6 +1477,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pyxirr" },
+    { name = "rasterio" },
     { name = "ruff" },
     { name = "scipy" },
 ]
@@ -1427,6 +1500,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=18.0.0" },
     { name = "pydantic", specifier = ">2.9.0" },
     { name = "pyxirr", specifier = ">=0.10.6" },
+    { name = "rasterio", specifier = ">=1.4.2" },
     { name = "ruff", specifier = ">=0.7.4" },
     { name = "scipy", specifier = ">=1.14.1" },
 ]

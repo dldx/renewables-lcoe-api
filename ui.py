@@ -6,10 +6,13 @@ from urllib.parse import urlencode
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
+
+from capacity_factors import get_solar_capacity_factor
+
 pio.templates.default = "plotly_dark"
 
 from plotly.subplots import make_subplots
-from schema import SolarPVAssumptions
+from schema import CapacityFactor, Location, SolarPVAssumptions
 from model import calculate_cashflow_for_renewable_project, calculate_lcoe
 
 
@@ -291,6 +294,28 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
     with gr.Row():
         with gr.Column():
             with gr.Row():
+                with gr.Column():
+                    latitude = gr.Number(
+                        value=51.5074,
+                        label="Latitude",
+                        minimum=-90,
+                        maximum=90,
+                        step=0.1,
+                    )
+                    longitude = gr.Number(
+                        value=-0.1278,
+                        label="Longitude",
+                        minimum=-180,
+                        maximum=180,
+                        step=0.1,
+                    )
+                    address = gr.Text(
+                        label="Location", placeholder="London, UK", interactive=True
+                    )
+                    estimate_capacity_factor = gr.Button("Estimate capacity factor")
+                with gr.Column():
+                    location_plot = gr.Plot()
+            with gr.Row():
                 capacity_mw = gr.Slider(
                     value=30,
                     minimum=1,
@@ -398,7 +423,12 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         model_output = gr.Matrix(headers=None, max_height=800)
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Button(link="https://github.com/dldx/renewables-lcoe-api", value="Source Code", variant="secondary", size="sm")
+            gr.Button(
+                link="https://github.com/dldx/renewables-lcoe-api",
+                value="Source Code",
+                variant="secondary",
+                size="sm",
+            )
 
     # Set up event handlers for all inputs
     input_components = [
@@ -418,7 +448,7 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
 
     # Trigger calculation with submit button
     gr.on(
-        triggers=[submit_btn.click],
+        triggers=[submit_btn.click, capacity_factor.change],
         fn=trigger_lcoe,
         inputs=input_components,
         outputs=[
@@ -480,4 +510,53 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
         inputs=[debt_pct_of_capital_cost],
         outputs=[equity_pct_of_capital_cost],
         trigger_mode="always_last",
+    )
+
+    def get_capacity_factor_from_location(
+        latitude, longitude, address
+    ) -> Tuple[float, float, float, str]:
+        """Get the capacity factor for a given latitude and longitude, or location."""
+        pv_location = Location(latitude=latitude, longitude=longitude, address=address)
+        cf = get_solar_capacity_factor(pv_location.longitude, pv_location.latitude)
+        return (
+            cf,
+            pv_location.latitude,
+            pv_location.longitude,
+            pv_location.address,
+        )
+
+    gr.on([estimate_capacity_factor.click, interface.load],
+        fn=get_capacity_factor_from_location,
+        inputs=[latitude, longitude, address],
+        outputs=[capacity_factor, latitude, longitude, address],
+    )
+
+    def update_location_plot(latitude, longitude, address):
+        return px.scatter_mapbox(
+            pd.DataFrame({"latitude": [latitude], "longitude": [longitude], "address": [address]}),
+            lat="latitude",
+            lon="longitude",
+            mapbox_style="carto-darkmatter",
+            labels="address",
+            size=[10],
+        ).update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            mapbox=dict(
+                center=dict(lat=latitude, lon=longitude),
+                zoom=10,
+            )
+        )
+
+    gr.on(
+        [latitude.change, longitude.change, interface.load],
+        fn=update_location_plot,
+        inputs=[latitude, longitude, address],
+        outputs=[location_plot],
+    )
+
+    gr.on(
+        [address.input],
+        fn=lambda: (None, None),
+        inputs=[],
+        outputs=[latitude, longitude],
     )

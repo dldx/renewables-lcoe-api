@@ -175,3 +175,59 @@ class SolarPVAssumptions(BaseModel):
                 k: (None if v == "" or v == "None" else v) for k, v in values.items()
             }
         return values
+
+class Location(BaseModel):
+    longitude: Annotated[Optional[float], Field(ge=-180, le=180,
+                                        title="Longitude",
+                                        description="Longitude in decimal degrees")] = None
+    latitude: Annotated[Optional[float], Field(ge=-90, le=90,
+                                        title="Latitude",
+                                        description="Latitude in decimal degrees")] = None
+    address: Annotated[Optional[str], Field(
+        title="Address",
+        description="A location or street address",
+    )] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, values):
+        """Convert empty strings or 0s to None"""
+        if values.get("address") == "":
+            values["address"] = None
+        if values.get("longitude") == 0:
+            values["longitude"] = None
+        if values.get("latitude") == 0:
+            values["latitude"] = None
+        return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_location(cls, values):
+        if values.get("longitude") is None and values.get("latitude") is None:
+            if values.get("address") is None:
+                raise ValueError("Either longitude and latitude or address must be provided")
+        return values
+
+    # Get latitude and longitude from address using API
+    @model_validator(mode="after")
+    @classmethod
+    def get_lat_lon_from_address(cls, values):
+        if (values.latitude is None) and (values.longitude is None):
+            from gis import get_coordinates
+            coordinates = get_coordinates(values.address)
+            values.latitude = coordinates["latitude"]
+            values.longitude = coordinates["longitude"]
+            values.address = coordinates["display_name"]
+        return values
+
+class CapacityFactor(Location):
+    capacity_factor: Annotated[float, Field(
+        title="Capacity Factor",
+        description="The capacity factor at the given location",
+    )]
+
+    @field_validator("capacity_factor")
+    def check_capacity_factor(cls, value):
+        if value < 0 or value > 0.6:
+            raise ValueError("Capacity factor must be between 0 and 60%")
+        return value

@@ -1,10 +1,11 @@
-from typing import Annotated, Dict, List, Tuple
+from typing import Annotated, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 import pandas as pd
-from schema import SolarPVAssumptions
+from capacity_factors import get_solar_capacity_factor
+from schema import CapacityFactor, Location, SolarPVAssumptions
 from model import calculate_cashflow_for_renewable_project, calculate_lcoe
 
 app = FastAPI()
@@ -39,7 +40,18 @@ app.add_middleware(
 
 #     return RedirectResponse(redirect_url)
 
-@app.get("/solarpv/")
+
+@app.get("/solarpv")
 def get_lcoe(pv_assumptions: Annotated[SolarPVAssumptions, Query()]):
     return calculate_lcoe(pv_assumptions)
+
+
+@app.get("/solarpv/capacity_factor.json")
+def get_capacity_factor(pv_location: Annotated[Location, Query()]) -> CapacityFactor:
+    return CapacityFactor(
+        capacity_factor=get_solar_capacity_factor(pv_location.longitude, pv_location.latitude),  # type: ignore
+        **pv_location.model_dump(),
+    )
+
+
 app = gr.mount_gradio_app(app, interface, path="/")
