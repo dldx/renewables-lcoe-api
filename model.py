@@ -173,7 +173,7 @@ def calculate_cashflow_for_renewable_project(
     model = model.to_pandas()
 
     for period in model["Period"]:
-        if period > 1:
+        if period > 1 and period <= assumptions.loan_tenor_years:
             model.loc[period, "Interest_Expense_mn"] = (
                 model.loc[period, "Debt_Outstanding_BoP_mn"] * assumptions.cost_of_debt
             )

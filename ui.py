@@ -229,7 +229,11 @@ def update_equity_from_debt(debt_pct):
 
 def get_params(request: gr.Request) -> Dict:
     params = SolarPVAssumptions.model_validate(dict(request.query_params))
-    location_params = dict(longitude=request.query_params.get("longitude"), latitude=request.query_params.get("latitude"), address=request.query_params.get("address"))
+    location_params = dict(
+        longitude=request.query_params.get("longitude"),
+        latitude=request.query_params.get("latitude"),
+        address=request.query_params.get("address"),
+    )
     for key in location_params:
         if location_params[key] == "None":
             location_params[key] = None
@@ -245,7 +249,11 @@ def get_params(request: gr.Request) -> Dict:
         cost_of_equity: params.cost_of_equity,
         tax_rate: params.tax_rate,
         project_lifetime_years: params.project_lifetime_years,
-        loan_tenor_years: params.loan_tenor_years if params.loan_tenor_years else params.project_lifetime_years,
+        loan_tenor_years: (
+            params.loan_tenor_years
+            if params.loan_tenor_years
+            else params.project_lifetime_years
+        ),
         degradation_rate: params.degradation_rate,
         debt_pct_of_capital_cost: params.debt_pct_of_capital_cost,
         dscr: params.dscr,
@@ -613,7 +621,9 @@ with gr.Blocks(theme="citrus", title="Renewable LCOE API") as interface:
     # If user changes the project lifetime, set the maximum loan tenor to the project lifetime
     def update_loan_tenor(project_lifetime_years, loan_tenor_years):
         if project_lifetime_years < loan_tenor_years:
-            return gr.Slider(value=project_lifetime_years, maximum=project_lifetime_years)
+            return gr.Slider(
+                value=project_lifetime_years, maximum=project_lifetime_years
+            )
         return gr.Slider(maximum=project_lifetime_years)
 
     project_lifetime_years.change(
