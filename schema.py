@@ -4,19 +4,19 @@ from pydantic import BaseModel, Field, computed_field, field_validator, model_va
 
 class SolarPVAssumptions(BaseModel):
     capacity_mw: Annotated[
-        float, Field(ge=1, le=1000, title="Capacity (MW)", description="Capacity in MW")
+        float, Field(gt=0, le=1000, title="Capacity (MW)", description="Capacity in MW")
     ] = 30
     capacity_factor: Annotated[
         float,
         Field(
             ge=0,
-            le=0.6,
+            le=1,
             title="Capacity factor (%)",
             description="Capacity factor as a decimal, e.g., 0.2 for 20%",
         ),
     ] = 0.10
     capital_expenditure_per_kw: Annotated[
-        float, Field(ge=1e2, le=1e4, title="Capital expenditure ($/kW)")
+        float, Field(gt=0, title="Capital expenditure ($/kW)")
     ] = 670
     o_m_cost_pct_of_capital_cost: Annotated[
         float,
@@ -245,10 +245,6 @@ class CapacityFactor(Location):
     capacity_factor: Annotated[float, Field(
         title="Capacity Factor",
         description="The capacity factor at the given location",
+        ge=0,
+        le=1,
     )]
-
-    @field_validator("capacity_factor")
-    def check_capacity_factor(cls, value):
-        if value < 0 or value > 0.6:
-            raise ValueError("Capacity factor must be between 0 and 60%")
-        return value

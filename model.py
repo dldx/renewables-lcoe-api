@@ -280,4 +280,4 @@ def calculate_lcoe(
         # LCOE is too low
         LCOE_guess += 5
         lcoe = calculate_lcoe(assumptions, LCOE_guess, iter_count=iter_count + 1)
-    return lcoe
+    return float(lcoe)
