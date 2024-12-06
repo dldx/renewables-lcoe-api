@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, RedirectResponse
+import orjson
 import pandas as pd
 from pydantic import Field, model_validator
 from capacity_factors import get_solar_capacity_factor
@@ -78,14 +79,31 @@ class CashflowParams(SolarPVAssumptions):
 
 @app.get("/solarpv/cashflow.csv", response_class=PlainTextResponse)
 def get_cashflow(params: Annotated[CashflowParams, Query()]) -> str:
-    cashflow = calculate_cashflow_for_renewable_project(
-        params, tariff=params.tariff, return_model=True
-    )[0]
-    if params.transpose:
-        cashflow = cashflow.to_pandas().T
-        cashflow.columns = cashflow.loc["Period"].astype(int).astype(str)
-        return cashflow.drop(["Period"]).to_csv(float_format="%.3f")
+    try:
+        cashflow = calculate_cashflow_for_renewable_project(
+            params, tariff=params.tariff, return_model=True, errors="ignore"
+        )[0]
+        if params.transpose:
+            cashflow = cashflow.to_pandas().T
+            cashflow.columns = cashflow.loc["Period"].astype(int).astype(str)
+            return cashflow.drop(["Period"]).to_csv(float_format="%.3f")
+    except Exception as e:
+        return str(e)
     return cashflow.write_csv(float_precision=3)
 
+@app.get("/solarpv/cashflow.json")
+def get_cashflow_json(params: Annotated[CashflowParams, Query()]) -> Dict:
+    try:
+        cashflow, equity_irr, tariff, adjusted_assumptions = calculate_cashflow_for_renewable_project(
+            params, tariff=params.tariff, return_model=True, errors="ignore"
+        )
+    except Exception as e:
+        return {"error": str(e)}
+    return {
+        "cashflow": cashflow.to_pandas().to_dict(orient="records"),
+        "equity_irr": equity_irr,
+        "tariff": tariff,
+        "assumptions": adjusted_assumptions,
+    }
 
 app = gr.mount_gradio_app(app, interface, path="/")

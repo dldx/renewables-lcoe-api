@@ -37,7 +37,7 @@ class SolarPVAssumptions(BaseModel):
         ),
     ] = None
     cost_of_debt: Annotated[
-        float,
+        Optional[float],
         Field(
             ge=0,
             le=0.5,
@@ -46,7 +46,7 @@ class SolarPVAssumptions(BaseModel):
         ),
     ] = 0.05
     cost_of_equity: Annotated[
-        float,
+        Optional[float],
         Field(
             ge=0,
             le=0.5,
@@ -116,6 +116,11 @@ class SolarPVAssumptions(BaseModel):
             if self.debt_pct_of_capital_cost + self.equity_pct_of_capital_cost != 1:
                 raise ValueError("Debt and equity percentages must sum to 1")
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def remove_none_values(cls, values):
+        return {k: v for k, v in values.items() if v is not None}
 
     @computed_field
     @property

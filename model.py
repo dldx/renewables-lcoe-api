@@ -1,4 +1,4 @@
-from typing import Annotated, Iterable, Optional, Tuple
+from typing import Annotated, Iterable, Literal, Optional, Tuple
 import numpy as np
 import polars as pl
 from pyxirr import irr, npv
@@ -10,9 +10,9 @@ from schema import SolarPVAssumptions
 
 
 def calculate_cashflow_for_renewable_project(
-    assumptions: SolarPVAssumptions, tariff: float | Iterable, return_model=False
+    assumptions: SolarPVAssumptions, tariff: float | Iterable, return_model=False, errors: Literal["raise", "ignore"] = "raise"
 ) -> (
-    Annotated[Optional[float], "Post-tax equity IRR - Cost of equity"]
+    Annotated[float | None, "Post-tax equity IRR - Cost of equity"]
     | Tuple[
         Annotated[pl.DataFrame, "Cashflow model"],
         Annotated[float | None, "Post-tax equity IRR"],
@@ -28,8 +28,11 @@ def calculate_cashflow_for_renewable_project(
         return_model (bool, optional): Whether to return the model. Defaults to False.
 
     Returns:
-        Optional[float]: The post-tax equity IRR - cost of equity
-        Tuple[pl.DataFrame, float, float, SolarPVAssumptions]: The model, post-tax equity IRR, breakeven tariff, and assumptions
+        float: post-tax equity IRR - cost of equity (if return_model is False)
+        pl.DataFrame: Cashflow model (if return_model is True)
+        float: Post-tax equity IRR (if return_model is True)
+        float: Breakeven tariff (if return_model is True)
+        SolarPVAssumptions: Assumptions (if return_model is True)
     """
 
     # Tariff must be a number
@@ -97,12 +100,11 @@ def calculate_cashflow_for_renewable_project(
                 .otherwise(pl.col("CFADS_mn") / assumptions.dscr),
             )
         )
-        assumptions.debt_pct_of_capital_cost = pyxirr.npv(
+        # Calculate debt % of capital cost by calculating NPV of debt service, and then dividing by capital cost
+        assumptions.debt_pct_of_capital_cost = min(1, pyxirr.npv(
             assumptions.cost_of_debt,
             model.select("Target_Debt_Service_mn").__array__()[0:assumptions.loan_tenor_years+1, 0],
-        ) / (assumptions.capital_cost / 1000)
-        # print(assumptions.debt_pct_of_capital_cost)
-        # assumptions.equity_pct_of_capital_cost = 1 - assumptions.debt_pct_of_capital_cost
+        ) / (assumptions.capital_cost / 1000))
         assert (
             assumptions.debt_pct_of_capital_cost
             + assumptions.equity_pct_of_capital_cost
@@ -240,18 +242,28 @@ def calculate_cashflow_for_renewable_project(
         )
     )
 
+    ## Do some sanity checks
+    # Check that the debt outstanding at the end of the loan period is zero
+    assert (
+        (model["Debt_Outstanding_EoP_mn"].slice(assumptions.loan_tenor_years,) < 0.0001).all() # type: ignore
+    ), f"Debt outstanding at the end of the loan period is not zero: {model['Debt_Outstanding_EoP_mn'].slice(assumptions.loan_tenor_years,)}" # type: ignore
+
+
     # Calculate Post-Tax Equity IRR
     try:
         post_tax_equity_irr = irr(model["Post_Tax_Net_Equity_Cashflow_mn"].to_numpy())
     except pyxirr.InvalidPaymentsError as e:
-        if assumptions.debt_pct_of_capital_cost == 1:
-            raise AssertionError(
-                "The project is fully financed by debt so equity IRR is infinite."
-            )
+        if errors == "ignore":
+            post_tax_equity_irr = None
         else:
-            raise AssertionError(
-                f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}."
-            )
+            if assumptions.debt_pct_of_capital_cost == 1:
+                raise AssertionError(
+                    "The project is fully financed by debt so equity IRR is infinite."
+                )
+            else:
+                raise AssertionError(
+                    f"The power tariff is too low so the project never breaks even. Please increase it from {tariff}."
+                )
 
     if return_model:
         return model, post_tax_equity_irr, tariff, assumptions
