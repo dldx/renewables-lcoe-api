@@ -242,6 +242,31 @@ def calculate_cashflow_for_renewable_project(
         )
     )
 
+    # Rearrange columns so that they are always in the same order
+    model = model[
+        [
+            "Period",
+            "Capacity_MW",
+            "Capacity_Factor",
+            "Tariff_per_MWh",
+            "Total_Generation_MWh",
+            "Total_Revenues_mn",
+            "O_M_Costs_mn",
+            "Total_Operating_Costs_mn",
+            "EBITDA_mn",
+            "CFADS_mn",
+            "Debt_Outstanding_EoP_mn",
+            "Interest_Expense_mn",
+            "Amortization_mn",
+            "Debt_Outstanding_BoP_mn",
+            "Target_Debt_Service_mn",
+            "Depreciation_mn",
+            "Taxable_Income_mn",
+            "Tax_Liability_mn",
+            "Post_Tax_Net_Equity_Cashflow_mn",
+        ]
+    ]
+
     ## Do some sanity checks
     # Check that the debt outstanding at the end of the loan period is zero
     assert (
